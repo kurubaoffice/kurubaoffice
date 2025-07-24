@@ -1,0 +1,9 @@
+# requirements.txt
+
+yfinance
+psycopg2-binary
+python-dotenv
+nsetools
+requests
+nsepython
+pandas
