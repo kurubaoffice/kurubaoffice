@@ -5,29 +5,30 @@ import pandas as pd
 import yfinance as yf
 from psycopg2 import sql
 from dotenv import load_dotenv
-from psycopg2 import sql
 from psycopg2.extras import execute_values
-from datetime import datetime
 import numpy as np
 
-# Add project root to path for clean imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from storage.connection import get_connection  # ✅ Handles DB connection + dotenv
+# Project Root (always global, e.g., Tidder2.0/)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(PROJECT_ROOT)
 
 # Load environment variables
 load_dotenv()
 
-# File paths
-DATA_DIR = os.path.join("data", "raw")
+# Global Data Folder
+DATA_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
 os.makedirs(DATA_DIR, exist_ok=True)
 OUTPUT_FILE = os.path.join(DATA_DIR, "company_info.csv")
+SKIPPED_FILE = os.path.join(DATA_DIR, "skipped_symbols.txt")
+
+from storage.connection import get_connection
 
 
 def fetch_stock_list():
     with get_connection() as conn:
-        df = pd.read_sql("SELECT symbol FROM stocks WHERE symbol IN ('INFY', 'TCS', 'RELIANCE')", conn)
-        print("List pulled as per rule.")
+        df = pd.read_sql("SELECT symbol FROM stocks", conn)
+        print("✅ Pulled stock list from DB.")
+        print(f"ℹ️ Total symbols fetched: {len(df)}")
         return df['symbol'].tolist()
 
 
@@ -35,16 +36,18 @@ def fetch_company_details(symbol):
     try:
         ticker = yf.Ticker(symbol + ".NS")
         info = ticker.info
+        if not info or 'longName' not in info:
+            return None
         return {
             "symbol": symbol,
             "name": info.get("longName") or info.get("shortName"),
             "sector": info.get("sector"),
-            "market_cap": round(info.get("marketCap", 0) / 1e7, 2),  # In crores
+            "market_cap": round(info.get("marketCap", 0) / 1e7, 2),  # in Crores
             "pe_ratio": info.get("trailingPE"),
             "roe": info.get("returnOnEquity") * 100 if info.get("returnOnEquity") else None,
             "eps": info.get("trailingEps"),
-            "promoter_holding": None,  # Placeholder
-            "institutional_holding": None,  # Placeholder
+            "promoter_holding": None,  # To be filled later
+            "institutional_holding": None,
             "last_updated": datetime.now()
         }
     except Exception as e:
@@ -52,15 +55,7 @@ def fetch_company_details(symbol):
         return None
 
 
-from psycopg2.extras import execute_values
-from psycopg2 import sql, DatabaseError
-from datetime import datetime
-import pandas as pd
-
 def insert_into_db(df):
-    from psycopg2.extras import execute_values
-
-    # Ensure last_updated is a datetime object
     df['last_updated'] = pd.to_datetime(df['last_updated'])
 
     with get_connection() as conn:
@@ -83,41 +78,49 @@ def insert_into_db(df):
                 last_updated = EXCLUDED.last_updated
         """)
 
-        # Explicitly convert to list of tuples (preserving datetime type)
         values = [tuple(row) for row in df.itertuples(index=False, name=None)]
 
         print(f"[DB] Preparing to insert {len(values)} records...")
-        print("[DB] Sample values (first record):", values[0])
+        if values:
+            print("[DEBUG] First record preview:", values[0])
 
         execute_values(cursor, insert_query, values)
         conn.commit()
         print(f"[DB] Inserted/Updated {len(values)} records into company_info")
 
 
-
 def run():
     print("[START] Fetching company info...")
     symbols = fetch_stock_list()
-    print(f"[INFO] Total symbols: {len(symbols)}")
 
     all_data = []
-    for i, symbol in enumerate(symbols, start=1):
-        print(f"[INFO] symbols: {symbols}")
-        try:
-            data = fetch_company_details(symbol)
-            if data:
-                all_data.append(data)
-        except Exception as e:
-            print(f"[ERROR] {symbol}: {e}")
+    skipped = []
 
-        if i % 500 == 0:
-            print(f"[PROGRESS] Processed {i}/{len(symbols)}")
+    for i, symbol in enumerate(symbols, start=1):
+        print(f"[INFO] Processing: {symbol}")
+        data = fetch_company_details(symbol)
+        if data:
+            all_data.append(data)
+        else:
+            skipped.append(symbol)
+
+        if i % 100 == 0 or i == len(symbols):
+            print(f"[PROGRESS] {i}/{len(symbols)} processed")
 
     df = pd.DataFrame(all_data)
-    df.to_csv("data/raw/company_info.csv", index=False)
-    print(f"[CSV] Saved company info to data\\raw\\company_info.csv")
 
-    insert_into_db(df)
+    df.to_csv(OUTPUT_FILE, index=False)
+    print(f"[CSV] Saved company info to {OUTPUT_FILE}")
+
+    if skipped:
+        with open(SKIPPED_FILE, "w") as f:
+            f.write("\n".join(skipped))
+        print(f"[SKIPPED] {len(skipped)} symbols skipped. Logged to {SKIPPED_FILE}")
+
+    if not df.empty:
+        insert_into_db(df)
+    else:
+        print("[DB] No valid data to insert.")
 
 
 if __name__ == "__main__":
