@@ -29,3 +29,14 @@ def insert_price_data(df):
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_latest_date_for_symbol(symbol):
+    from storage.connection import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT MAX(date) FROM price_data WHERE symbol = %s", (symbol,))
+    result = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return result

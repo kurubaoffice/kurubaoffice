@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 import yfinance as yf
 import pandas as pd
 from storage.db_writer import get_latest_date_for_symbol, insert_price_data
+from utils.db import get_latest_date_for_symbol
+
+latest = get_latest_date_for_symbol("RELIANCE")
+print("Last available date in DB:", latest)
 
 
 def fetch_incremental_price_data(symbol):
