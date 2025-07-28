@@ -41,10 +41,35 @@ def calculate_macd(symbol, period="6mo", interval="1d"):
     except Exception as e:
         print(f"[ERROR] MACD calculation failed: {e}")
         return pd.DataFrame()
+import matplotlib.pyplot as plt
+
+def plot_macd(df, symbol):
+    if df.empty or 'MACD' not in df.columns:
+        print("[WARN] No data to plot.")
+        return
+
+    plt.figure(figsize=(14, 7))
+    plt.title(f"MACD Indicator for {symbol}")
+    plt.plot(df.index, df['MACD'], label='MACD', color='blue', linewidth=1.5)
+    plt.plot(df.index, df['Signal_Line'], label='Signal Line', color='orange', linewidth=1.5)
+    plt.bar(df.index, df['MACD_Histogram'], label='Histogram', color='gray', alpha=0.4)
+
+    # Mark Bullish and Bearish Crossovers
+    bullish = df[df['MACD_Signal'] == 'Bullish Crossover']
+    bearish = df[df['MACD_Signal'] == 'Bearish Crossover']
+
+    plt.scatter(bullish.index, bullish['MACD'], label='Bullish', marker='^', color='green', s=80)
+    plt.scatter(bearish.index, bearish['MACD'], label='Bearish', marker='v', color='red', s=80)
+
+    plt.legend(loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     symbol = "HDFCBANK.NS"
     df = calculate_macd(symbol)
+    plot_macd(df, symbol)
 
     if df.empty or not {'MACD', 'Signal_Line', 'MACD_Signal'}.issubset(df.columns):
         print(f"⚠️ Missing MACD data in DataFrame for {symbol}")
