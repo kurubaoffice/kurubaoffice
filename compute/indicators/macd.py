@@ -67,7 +67,7 @@ def plot_macd(df, symbol):
     plt.show()
 
 if __name__ == "__main__":
-    symbol = "HDFCBANK.NS"
+    symbol = "EPACK.NS"
     df = calculate_macd(symbol)
     plot_macd(df, symbol)
 
