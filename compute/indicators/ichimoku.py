@@ -172,8 +172,10 @@ if __name__ == "__main__":
         print(summarize_ichimoku(signals))
 
     # Save JSON to global data folder
-    output_dir = "data/processed/indicators"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # Points to Tidder2.0/
+    output_dir = os.path.join(BASE_DIR, 'data', 'processed', 'indicators')
     os.makedirs(output_dir, exist_ok=True)
+
     output_path = os.path.join(output_dir, f"{symbol.replace('.NS', '').lower()}_ichimoku.json")
 
     with open(output_path, 'w') as f:
