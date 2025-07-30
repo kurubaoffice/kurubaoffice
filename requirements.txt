@@ -1,9 +1,13 @@
 # requirements.txt
 
-yfinance
-psycopg2-binary
-python-dotenv
+yfinance~=0.2.65
+psycopg2-binary~=2.9.10
+python-dotenv~=1.1.1
 nsetools
-requests
+requests~=2.32.4
 nsepython
-pandas
+pandas~=2.3.1
+
+matplotlib~=3.10.3
+ta~=0.11.0
+numpy~=2.3.1
