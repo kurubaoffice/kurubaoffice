@@ -1,6 +1,12 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import json
+import pandas as pd
+print(pd.__version__)
+
+
 
 def calculate_ichimoku(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -23,11 +29,9 @@ def interpret_ichimoku(df: pd.DataFrame) -> dict:
     latest = df.iloc[-1:]
 
     try:
-        a = float(
-            latest['senkou_span_a'].item() if hasattr(latest['senkou_span_a'], 'item') else latest['senkou_span_a'])
-        b = float(
-            latest['senkou_span_b'].item() if hasattr(latest['senkou_span_b'], 'item') else latest['senkou_span_b'])
-        price = float(latest['Close'].item() if hasattr(latest['Close'], 'item') else latest['Close'])
+        a = latest['senkou_span_a'].values[0]
+        b = latest['senkou_span_b'].values[0]
+        price = latest['Close'].values[0]
 
         if price > max(a, b):
             signals['cloud_position'] = 'Bullish'
@@ -39,10 +43,12 @@ def interpret_ichimoku(df: pd.DataFrame) -> dict:
         signals['cloud_position'] = 'Insufficient Data'
 
     try:
-        if pd.notna(latest['tenkan_sen'].iloc[0]) and pd.notna(latest['kijun_sen'].iloc[0]):
-            if latest['tenkan_sen'].iloc[0] > latest['kijun_sen'].iloc[0]:
+        tenkan = latest['tenkan_sen'].iloc[0]
+        kijun = latest['kijun_sen'].iloc[0]
+        if pd.notna(tenkan) and pd.notna(kijun):
+            if tenkan > kijun:
                 signals['tk_cross'] = 'Bullish Crossover'
-            elif latest['tenkan_sen'].iloc[0] < latest['kijun_sen'].iloc[0]:
+            elif tenkan < kijun:
                 signals['tk_cross'] = 'Bearish Crossover'
             else:
                 signals['tk_cross'] = 'No Crossover'
@@ -54,10 +60,11 @@ def interpret_ichimoku(df: pd.DataFrame) -> dict:
     try:
         if len(df) >= 27:
             past_price = df.iloc[-27]['Close']
-            if pd.notna(latest['chikou_span'].iloc[0]):
-                if latest['chikou_span'].iloc[0] > past_price:
+            chikou = latest['chikou_span'].iloc[0]
+            if pd.notna(chikou):
+                if chikou > past_price:
                     signals['chikou_confirmation'] = 'Bullish'
-                elif latest['chikou_span'].iloc[0] < past_price:
+                elif chikou < past_price:
                     signals['chikou_confirmation'] = 'Bearish'
                 else:
                     signals['chikou_confirmation'] = 'Neutral'
@@ -98,7 +105,6 @@ def plot_ichimoku(df: pd.DataFrame, symbol: str = None, save_path: str = None):
     plt.fill_between(df.index, df['senkou_span_a'], df['senkou_span_b'],
                      where=(df['senkou_span_a'] >= df['senkou_span_b']),
                      color='lightgreen', alpha=0.3)
-
     plt.fill_between(df.index, df['senkou_span_a'], df['senkou_span_b'],
                      where=(df['senkou_span_a'] < df['senkou_span_b']),
                      color='lightcoral', alpha=0.3)
@@ -164,5 +170,15 @@ if __name__ == "__main__":
     else:
         print(f"\n📊 Ichimoku Technical Summary for {symbol}:\n")
         print(summarize_ichimoku(signals))
+
+    # Save JSON to global data folder
+    output_dir = "data/processed/indicators"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{symbol.replace('.NS', '').lower()}_ichimoku.json")
+
+    with open(output_path, 'w') as f:
+        json.dump(signals, f, indent=4)
+
+    print(f"\n✅ Ichimoku signal saved to {output_path}")
 
     plot_ichimoku(df, symbol=symbol)
