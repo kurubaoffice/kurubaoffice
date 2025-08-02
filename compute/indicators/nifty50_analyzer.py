@@ -136,7 +136,7 @@ def analyze_banknifty_stocks(save_data=False):
     print("📊 Analyzing Stocks:")
     for symbol in tqdm(BANKNIFTY_STOCKS):
         try:
-            df = fetch_price_data(symbol)
+            df = fetch_price_for_symbol(symbol)
             if df is None or df.empty:
                 raise ValueError(f"No historical data for {symbol}")
 
