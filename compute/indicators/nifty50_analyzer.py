@@ -3,19 +3,15 @@ import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
 
+from fetcher.fetch_price_data import fetch_price_for_symbol
+#from modules.indicators.indicators import apply_all_indicators
 import os
 import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
 
-from fetcher.fetch_price_data import fetch_price_for_symbol
-from modules.indicators.indicators import apply_all_indicators
 
-BANKNIFTY_STOCKS = [
-    'AXISBANK', 'BANDHANBNK', 'BANKBARODA', 'FEDERALBNK', 'HDFCBANK',
-    'ICICIBANK', 'IDFCFIRSTB', 'INDUSINDBK', 'KOTAKBANK', 'PNB', 'RBLBANK',
-    'SBIN', 'YESBANK'
-]
+BANKNIFTY_STOCKS = ['TRENT', 'EICHERMOT', 'ASIANPAINT', 'HINDUNILVR', 'NESTLEIND', 'ITC', 'HEROMOTOCO', 'KOTAKBANK', 'BAJAJ-AUTO', 'RELIANCE', 'JIOFIN', 'HDFCBANK', 'POWERGRID', 'TATACONSUM', 'SBIN', 'BAJFINANCE', 'GRASIM', 'AXISBANK', 'ICICIBANK', 'COALINDIA', 'NTPC', 'ULTRACEMCO', 'TITAN', 'ETERNAL', 'LT', 'TCS', 'M&M', 'HCLTECH', 'HINDALCO', 'BAJAJFINSV', 'BEL', 'MARUTI', 'ADANIPORTS', 'HDFCLIFE', 'APOLLOHOSP', 'INDUSINDBK', 'BHARTIARTL', 'TECHM', 'JSWSTEEL', 'ONGC', 'SBILIFE', 'WIPRO', 'SHRIRAMFIN', 'TATAMOTORS', 'INFY', 'TATASTEEL', 'CIPLA', 'ADANIENT', 'DRREDDY', 'SUNPHARMA']
 
 CONFIG = {
     "indicators": {
