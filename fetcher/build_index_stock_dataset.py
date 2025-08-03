@@ -3,9 +3,11 @@ import pandas as pd
 import yfinance as yf
 from fetcher.fetch_index_data import get_index_constituents
 
+
 # ==== Sample Indicator Functions ====
 def compute_ema(df, window=20):
     return df['Close'].ewm(span=window, adjust=False).mean()
+
 
 def compute_rsi(df, window=14):
     delta = df['Close'].diff()
@@ -14,12 +16,17 @@ def compute_rsi(df, window=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# ==== Storage Function ====
-def save_to_csv(df, symbol, path="data/stocks_with_indicators"):
-    os.makedirs(path, exist_ok=True)
-    file_path = os.path.join(path, f"{symbol}.csv")
+
+# ==== ✅ Storage Function (Global Data Path) ====
+def save_to_csv(df, symbol):
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    save_path = os.path.join(project_root, "data", "processed", "stocks")
+    os.makedirs(save_path, exist_ok=True)
+
+    file_path = os.path.join(save_path, f"{symbol}.csv")
     df.to_csv(file_path, index=False)
     print(f"✅ Saved {symbol} with indicators → {file_path}")
+
 
 # ==== Main Function ====
 def build_nifty50_indicator_dataset():
@@ -41,6 +48,7 @@ def build_nifty50_indicator_dataset():
             save_to_csv(df, symbol)
         except Exception as e:
             print(f"[ERROR] {symbol}: {e}")
+
 
 # ==== Run It ====
 if __name__ == "__main__":

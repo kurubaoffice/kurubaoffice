@@ -1,13 +1,21 @@
-import pandas as pd
+# compute/apply_indicators.py
 
-def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
-    delta = df['close'].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
+from compute.indicators.rsi import calculate_rsi
+from compute.indicators.macd import calculate_macd
+from compute.indicators.supertrend import calculate_supertrend
+from compute.indicators.ema import calculate_ema
+# Add more as needed
 
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-
-    rs = avg_gain / avg_loss
-    df[f"rsi_{period}"] = 100 - (100 / (1 + rs))
+def apply_indicators(df, config=None):
+    """
+    Applies a standard set of indicators to the given OHLCV dataframe.
+    You can pass a config dict to control which indicators to apply and with what params.
+    """
+    df = calculate_rsi(df)
+    df = calculate_macd(df)
+    df = calculate_supertrend(df)
+    df = calculate_ema(df, length=20)
+    df = calculate_ema(df, length=50)
+    df = calculate_ema(df, length=200)
+    # Add more as required
     return df
