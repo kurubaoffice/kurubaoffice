@@ -1,20 +1,24 @@
-# reporting/report_nifty_analysis.py
-
 from compute.apply_indicators import apply_indicators
 from compute.indicators.interpretation import interpret_signals
+from compute.indicators.confidence_score import compute_confidence_score
+
 from utils.data_loader import get_index_historical, get_stock_historical
 from utils.helpers import get_nifty_constituents
 from reporting.format_report import format_nifty_full_report
 
+print("🔁 analyze_nifty() was called!")
 
-def analyze_nifty(period="3mo", interval="1d"):
+def analyze_nifty(period="3mo", interval="1d", for_telegram=False):
     # --- Step 1: Get index data ---
     index_df = get_index_historical("^NSEI", period=period, interval=interval)
     index_df = apply_indicators(index_df)
     index_signals = interpret_signals(index_df)
 
+    if not isinstance(index_signals, dict):
+        print(f"[DEBUG] Invalid index_signals: {index_signals} ({type(index_signals)})")
+
     # --- Step 2: Get constituent data ---
-    constituents = get_nifty_constituents()  # Expects symbols as list
+    constituents = get_nifty_constituents()
     stock_summaries = []
 
     for symbol in constituents:
@@ -22,12 +26,16 @@ def analyze_nifty(period="3mo", interval="1d"):
             stock_df = get_stock_historical(symbol, period=period, interval=interval)
             stock_df = apply_indicators(stock_df)
             stock_signals = interpret_signals(stock_df)
+            confidence = compute_confidence_score(stock_signals)
+            print(f"🔢 Confidence for {symbol}: {confidence}%")
             stock_summaries.append({
                 "symbol": symbol,
-                "signals": stock_signals
+                "signals": stock_signals,
+                "confidence": confidence
             })
+
         except Exception as e:
             print(f"[Error] {symbol}: {e}")
 
     # --- Step 3: Format unified report ---
-    return format_nifty_full_report(index_signals, stock_summaries)
+    return format_nifty_full_report(index_signals, stock_summaries, for_telegram=for_telegram)

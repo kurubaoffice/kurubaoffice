@@ -7,15 +7,16 @@ from dotenv import load_dotenv
 
 
 from reporting.report_nifty_analysis import analyze_nifty
+from reporting.report_stock_summary import run_pipeline_for_symbol
+
 load_dotenv()
 token = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-#LISTED_COMPANIES_PATH = os.path.join("data", "raw", "listed_companies.csv")
+from utils.helpers import get_project_root
 
-# Dynamically locate project root
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-CSV_PATH = os.path.join(PROJECT_ROOT, "data", "raw", "listed_companies.csv")
+CSV_PATH = get_project_root() / "data" / "raw" / "listed_companies.csv"
+print(f"[DEBUG] Looking for CSV at: {CSV_PATH}")
 
 
 def resolve_symbol_from_name(name):
@@ -85,7 +86,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text.strip().upper()
 
-    # Typing animation
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
     if text == "/START":
@@ -94,6 +94,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "/HELP":
         await handle_help(update, context)
+        return
+
+    if text == "NIFTY50":
+        await handle_nifty(update, context)
         return
 
     print(f"📩 Received from {chat_id}: {text}")
@@ -111,6 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to generate report for {symbol}")
 
+
 async def handle_nifty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message_text = update.message.text.lower()
@@ -118,14 +123,52 @@ async def handle_nifty(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=chat_id, text="📊 Running *NIFTY 50* analysis, please wait...", parse_mode="Markdown")
 
     try:
-        # Check if user typed "nifty save"
-        save_flag = "save" in message_text
-        report = analyze_nifty(save_data=True)
-        await context.bot.send_message(chat_id=chat_id, text=report, parse_mode="Markdown")
+        print("🟨 Running analyze_nifty...")
+        report = analyze_nifty(for_telegram=True)
+        print("🟩 Report received from analyze_nifty")
+
+        print(f"[DEBUG] Type of report: {type(report)}")
+        if isinstance(report, tuple):
+            print(f"[DEBUG] Report contents: {report}")
+            report = report[0]
+
+        # ❌ Don't send full report
+        # await context.bot.send_message(chat_id=chat_id, text=str(report), parse_mode="Markdown")
+
+        # ✅ Split & send in chunks
+        chunks = split_message(report)
+        for part in chunks:
+            await context.bot.send_message(chat_id=chat_id, text=part, parse_mode="Markdown")
 
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Analysis failed: {e}", parse_mode="Markdown")
+        import traceback
+        print("[❌ EXCEPTION TRACEBACK]")
+        traceback.print_exc()
 
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Analysis failed: {e}",
+            parse_mode="Markdown"
+        )
+
+
+def split_message(text, max_length=4000):
+    """Split long text into multiple parts for Telegram message limits."""
+    lines = text.split('\n')
+    chunks = []
+    chunk = ""
+
+    for line in lines:
+        if len(chunk) + len(line) + 1 > max_length:
+            chunks.append(chunk)
+            chunk = line
+        else:
+            chunk += "\n" + line
+
+    if chunk:
+        chunks.append(chunk)
+
+    return chunks
 
 def main():
     import os

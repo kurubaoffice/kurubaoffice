@@ -12,10 +12,10 @@ def calculate_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Original DataFrame with added 'RSI' and 'RSI_Signal' columns.
     """
-    if 'Close' not in df.columns:
+    if 'close' not in df.columns:
         raise ValueError("DataFrame must contain 'Close' column for RSI")
 
-    delta = df['Close'].diff()
+    delta = df['close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
@@ -49,8 +49,8 @@ def summarize_rsi_trend(df: pd.DataFrame, symbol: str):
 
     rsi_start = last_3['RSI'].iloc[0]
     rsi_end = last_3['RSI'].iloc[-1]
-    price_start = float(last_3["Close"].iloc[0])
-    price_end = float(last_3["Close"].iloc[-1])
+    price_start = float(last_3["close"].iloc[0])
+    price_end = float(last_3["close"].iloc[-1])
 
     rsi_trend = "Rising" if rsi_end > rsi_start else "Falling" if rsi_end < rsi_start else "Flat"
     price_change = price_end - price_start
