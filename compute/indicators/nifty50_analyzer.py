@@ -4,7 +4,7 @@ import yfinance as yf
 from tqdm import tqdm
 
 from fetcher.fetch_price_data import fetch_price_for_symbol
-#from modules.indicators.indicators import apply_all_indicators
+from compute.apply_indicators import apply_indicators
 import os
 import pandas as pd
 import yfinance as yf
@@ -67,7 +67,7 @@ def analyze_banknifty_index():
         if not required_cols.issubset(df.columns):
             return {"error": f"Missing columns: {required_cols - set(df.columns)}"}
 
-        df = apply_all_indicators(df, CONFIG)
+        df = apply_indicators(df, CONFIG)
         latest = df.iloc[-1]
 
         cmp = latest["close"]
@@ -149,7 +149,7 @@ def analyze_banknifty_stocks(save_data=False):
                 print(f"[WARNING] df['close'] is a DataFrame, converting to Series")
                 df['close'] = df['close'].iloc[:, 0]
 
-            df = apply_all_indicators(df, CONFIG)
+            df = apply_indicators(df, CONFIG)
             latest = df.iloc[-1]
 
             signal = is_bullish_signal(latest)

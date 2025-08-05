@@ -12,7 +12,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 from ta.volatility import BollingerBands
 
 def calculate_bollinger_bands(df, window=20, std_dev=2):
-    close_series = df["Close"]
+    close_series = df["close"]
     if isinstance(close_series, pd.DataFrame):  # If it's accidentally 2D
         close_series = close_series.squeeze()
     else:

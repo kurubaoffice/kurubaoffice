@@ -33,7 +33,7 @@ def apply_atr(df, config=None):
     try:
         if config and not config.get("atr", True):
             print("[INFO] ATR is disabled in config.")
-            return df, False
+            return df  # 🧼 Return df directly when disabled
 
         assert isinstance(df, pd.DataFrame), "[apply_atr] Input is not a DataFrame"
 
@@ -61,11 +61,12 @@ def apply_atr(df, config=None):
         df[f"atr_{atr_period}"] = atr_series
 
         print(f"[DEBUG] ✅ ATR applied with window={atr_period}")
-        return df, True
+        return df  # ✅ FIXED: Only return df
 
     except Exception as e:
         print(f"[ERROR] apply_atr failed: {e}")
-        return df, False
+        return df  # ✅ Consistent return
+
 
 
 def interpret_atr(df, atr_column="atr_14"):

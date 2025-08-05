@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import pathlib
 
-from compute.indicators.interpretation import interpret_signals
-from utils.helpers import get_nifty_constituents
+#from compute.indicators.interpretation import interpret_signals
+#from utils.helpers import get_nifty_constituents
 
 # Base paths
 BASE_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -29,24 +29,103 @@ def file_exists_case_insensitive(folder: pathlib.Path, target_file: str) -> path
     return None
 
 
-# ✅ MODIFIED: added for_telegram flag
-def format_nifty_full_report(index_signals, stock_summaries, for_telegram=False):
+def format_nifty_full_report(index_signals, stock_summaries, df_index=None, for_telegram=False):
     lines = ["📈 *NIFTY 50 Summary*"]
+
 
     # --- Index-level signals ---
     lines.append("\n📊 *Index Overview*")
-    show_keys = ["MACD", "EMA", "Supertrend", "RSI"]  # You can customize this list
+    if df_index is not None and not df_index.empty and "close" in df_index.columns:
+        latest_close = df_index.iloc[-1]["close"]
+        lines.append(f"• CMP: `{latest_close:.2f}`")
 
-    for key in show_keys:
-        if key in index_signals:
-            lines.append(f"- `{key}`: *{index_signals[key]}*")
 
-    # 🧠 Optional confidence value
+
+    tech_row = index_signals.get("__raw__")  # Must be set during signal generation
+
+    if tech_row:
+        # Extract and format detailed indicators
+        rsi_val = round(float(tech_row.get('RSI', 0.0)), 2)
+        macd_val = round(float(tech_row.get('macd', 0.0)), 2)
+        macd_signal_val = round(float(tech_row.get('macd_signal', 0.0)), 2)
+        adx_val = round(float(tech_row.get('adx', 0.0)), 2)
+        bb_upper = round(float(tech_row.get('bb_upper', 0.0)), 2)
+        bb_lower = round(float(tech_row.get('bb_lower', 0.0)), 2)
+        atr_val = round(float(tech_row.get('atr_14', 0.0)), 2)
+
+        supertrend_val = tech_row.get('supertrend', None)
+        if pd.isna(supertrend_val):
+            supertrend_str = '⚪ N/A'
+        else:
+            supertrend_str = '🟢 Buy' if supertrend_val else '🔴 Sell'
+
+        lines += [
+            f"• RSI (14): {rsi_val}",
+            f"• MACD: {macd_val}",
+            f"• MACD Signal: {macd_signal_val}",
+            f"• Supertrend: {supertrend_str}",
+            f"• ADX Strength: {adx_val}",
+            f"• BB Upper Band: {bb_upper}",
+            f"• BB Lower Band: {bb_lower}",
+            f"• ATR (Volatility): {atr_val}",
+        ]
+    else:
+        lines.append("_⚠️ No index-level data available._")
+
+    # --- Index Confidence ---
     conf = index_signals.get("confidence", None)
     if conf is not None:
-        lines.append(f"- 🧠 *Confidence*: `{conf:.1f}%`")
+        lines.append(f"\n✅ *NIFTY50 Confidence*: `{conf:.1f}%`")
 
-    # --- Stock-level summaries (non-Telegram only) ---
+    # -------------------------------
+    # ✅ Always show Top Confidence Stocks (even in Telegram)
+    # -------------------------------
+    top_conf = sorted(
+        [s for s in stock_summaries if "confidence" in s],
+        key=lambda x: x["confidence"],
+        reverse=True
+    )[:10]
+
+    if top_conf:
+        lines.append("\n🔢 *Top Confidence Stocks*")
+        for s in top_conf:
+            lines.append(f"- `{s['symbol']}`: {s['confidence']:.1f}%")
+
+    # -------------------------------
+    # 🧪 Optional: Show Signals to Watch (based on trend)
+    # Comment this block to hide it
+    # -------------------------------
+    bullish = [
+        s for s in stock_summaries
+        if s["signals"].get("Trend") == "Bullish"
+    ]
+    bearish = [
+        s for s in stock_summaries
+        if s["signals"].get("Trend") == "Bearish"
+    ]
+
+    if bullish or bearish:
+        lines.append("\n💡 *Signals to Watch*")
+
+    if bullish:
+        lines.append("🐂 *Bullish Stocks:*")
+        for s in bullish[:2]:
+            conf = s.get("confidence", None)
+            conf_str = f" – {conf:.1f}%" if conf is not None else ""
+            lines.append(f"  - `{s['symbol']}`{conf_str}")
+
+    if bearish:
+        lines.append("\n🐻 *Bearish Stocks:*")
+        for s in bearish[:2]:
+            conf = s.get("confidence", None)
+            conf_str = f" – {conf:.1f}%" if conf is not None else ""
+            lines.append(f"  - `{s['symbol']}`{conf_str}")
+
+    # -------------------------------
+    # 🚫 OPTIONAL BLOCK: Full Stock-Level Summary (for CLI, not Telegram)
+    # Uncomment this if needed
+    # -------------------------------
+    """
     if not for_telegram:
         lines.append("\n📈 *Top Stock Signals*")
         if isinstance(stock_summaries, list):
@@ -55,49 +134,11 @@ def format_nifty_full_report(index_signals, stock_summaries, for_telegram=False)
                 sigs = stock["signals"]
                 summary = ", ".join(f"{k}: {v}" for k, v in sigs.items())
                 lines.append(f"- `{sym}`: {summary}")
-
-        # --- Top Confidence Rankings ---
-        top_conf = sorted(
-            [s for s in stock_summaries if "confidence" in s],
-            key=lambda x: x["confidence"],
-            reverse=True
-        )[:10]
-
-        if top_conf:
-            lines.append("\n🔢 *Top Confidence Stocks*")
-            for s in top_conf:
-                lines.append(f"- `{s['symbol']}`: {s['confidence']:.1f}%")
-
-    # --- Signals to Watch with Confidence ---
-    if isinstance(stock_summaries, list):
-        bullish = [
-            s for s in stock_summaries
-            if s["signals"].get("Trend") == "Bullish"
-        ]
-        bearish = [
-            s for s in stock_summaries
-            if s["signals"].get("Trend") == "Bearish"
-        ]
-
-        if bullish or bearish:
-            lines.append("\n💡 *Signals to Watch*")
-
-        if bullish:
-            lines.append("🐂 *Bullish Stocks:*")
-            for s in bullish[:10]:
-                conf = s.get("confidence", None)
-                conf_str = f" – {conf:.1f}%" if conf is not None else ""
-                lines.append(f"  - `{s['symbol']}`{conf_str}")
-
-        if bearish:
-            lines.append("\n🐻 *Bearish Stocks:*")
-            for s in bearish[:10]:
-                conf = s.get("confidence", None)
-                conf_str = f" – {conf:.1f}%" if conf is not None else ""
-                lines.append(f"  - `{s['symbol']}`{conf_str}")
+    """
 
     print(f"[DEBUG] Returning report of type: {type(lines)}")
     print(f"[DEBUG] Sample return value: {lines[:2]}")
 
     return "\n".join(lines)
+
 

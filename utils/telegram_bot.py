@@ -124,7 +124,7 @@ async def handle_nifty(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         print("🟨 Running analyze_nifty...")
-        report = analyze_nifty(for_telegram=True)
+        report = analyze_nifty(for_telegram=False)
         print("🟩 Report received from analyze_nifty")
 
         print(f"[DEBUG] Type of report: {type(report)}")

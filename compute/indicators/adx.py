@@ -1,67 +1,75 @@
-import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 from ta.trend import ADXIndicator
 
+def calculate_adx_from_df(df, window=14, symbol=None, testing=False):
+    """
+    Calculate ADX and return enriched DataFrame + summary dict.
 
-def calculate_adx(symbol, period="9mo", interval="1d", window=14, testing=False):
+    Args:
+        df (pd.DataFrame): Must contain 'high', 'low', 'close' (lowercase).
+        window (int): Window for ADX calculation.
+        symbol (str): Optional, for display in testing plots.
+        testing (bool): If True, prints and plots ADX details.
+
+    Returns:
+        df (pd.DataFrame): With ['adx', '+di', '-di'] columns.
+        dict: Summary including trend strength, direction, and signal.
+    """
     try:
-        df = yf.download(symbol, period=period, interval=interval, auto_adjust=False)
-
-        # Flatten if MultiIndex
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        # Remove column name if present
-        df.columns.name = None
-
-        # Lowercase for consistency
-        df.columns = [col.lower() for col in df.columns]
-        print(f"[INFO] Data downloaded for {symbol}: {df.shape[0]} rows")
-
-
+        # --- Check for required columns ---
         required_cols = ['high', 'low', 'close']
         if not all(col in df.columns for col in required_cols):
             raise KeyError(f"[ERROR] Required OHLC columns missing. Found: {df.columns}")
 
+        # --- Calculate ADX and directional indicators ---
         adx = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=window)
         df['adx'] = adx.adx()
         df['+di'] = adx.adx_pos()
         df['-di'] = adx.adx_neg()
 
+        # --- Optional Debug Logging ---
         if testing:
+            print("[DEBUG] Last 10 rows of ADX data:")
             print(df[['close', 'adx', '+di', '-di']].tail(10).round(2))
             df.tail(60).plot(
                 y=['adx', '+di', '-di'],
                 figsize=(12, 6),
-                title=f"ADX ({window}) - {symbol}"
+                title=f"ADX ({window}) - {symbol or 'Symbol'}"
             )
             plt.grid(True)
             plt.show()
 
-        # ✅ Meaningful Summary
-        last_row = df.iloc[-1]
-        adx_value = last_row['adx']
-        plus_di = last_row['+di']
-        minus_di = last_row['-di']
+        # --- Get Last Valid Row (avoid NaN from .iloc[-1]) ---
+        latest_valid = df.dropna(subset=['adx', '+di', '-di'])
+        if latest_valid.empty:
+            raise ValueError("[ERROR] No valid ADX data to interpret.")
 
+        latest = latest_valid.iloc[-1]
+        adx_val = latest['adx']
+        plus_di = latest['+di']
+        minus_di = latest['-di']
+
+        # --- Compute Interpretation ---
         strength = (
-            "Strong" if adx_value > 25
-            else "Weak" if adx_value < 20
-            else "Moderate"
+            "Strong" if adx_val > 25 else
+            "Weak" if adx_val < 20 else
+            "Moderate"
         )
         direction = (
-            "Bullish" if plus_di > minus_di
-            else "Bearish" if minus_di > plus_di
-            else "Sideways"
+            "Bullish" if plus_di > minus_di else
+            "Bearish" if minus_di > plus_di else
+            "Sideways"
+        )
+        signal = (
+            "Buy" if strength == "Strong" and direction == "Bullish" else
+            "Sell" if strength == "Strong" and direction == "Bearish" else
+            "Hold"
         )
 
-        signal = "Buy" if direction == "Bullish" and strength == "Strong" else (
-                 "Sell" if direction == "Bearish" and strength == "Strong" else "Hold")
-
-        result = {
+        summary = {
             "indicator": "ADX",
-            "adx_value": round(adx_value, 2),
+            "adx_value": round(adx_val, 2),
             "+DI": round(plus_di, 2),
             "-DI": round(minus_di, 2),
             "trend_strength": strength,
@@ -69,22 +77,16 @@ def calculate_adx(symbol, period="9mo", interval="1d", window=14, testing=False)
             "current_signal": signal
         }
 
-        return df, result
+        return df, summary
 
     except Exception as e:
         print(f"[ERROR] ADX calculation failed: {e}")
-        return pd.DataFrame(), {}
-
-
-if __name__ == "__main__":
-    symbol = "RELIANCE.NS"
-    testing = True  # Set False when used in engine
-
-    df, summary = calculate_adx(symbol, window=14, testing=testing)
-
-    if df.empty or 'adx' not in df.columns:
-        print(f"⚠️ Missing ADX data in DataFrame for {symbol}")
-    else:
-        print(f"[✅] ADX result for {symbol}:")
-        for k, v in summary.items():
-            print(f"   {k}: {v}")
+        return df, {
+            "indicator": "ADX",
+            "adx_value": None,
+            "+DI": None,
+            "-DI": None,
+            "trend_strength": "N/A",
+            "trend_direction": "N/A",
+            "current_signal": "N/A"
+        }
