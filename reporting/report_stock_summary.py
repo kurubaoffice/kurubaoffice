@@ -1,19 +1,17 @@
 # reporting/report_stock_summary.py
-from reporting.format_report import format_stock_summary  # ✅ Correct function
+
+from reporting.format_report import format_stock_summary
+from compute.apply_indicators import apply_indicators
+from compute.indicators.interpretation import interpret_signals
+from utils.data_loader import get_stock_historical
 
 def run_pipeline_for_symbol(symbol, chat_id=None):
-    from compute.apply_indicators import apply_indicators
-    from compute.indicators.interpretation import interpret_signals
-    from utils.data_loader import get_stock_historical
-    from reporting.format_report import format_nifty_full_report
-
     try:
         df = get_stock_historical(symbol)
         df = apply_indicators(df)
         signals = interpret_signals(df)
         report = format_stock_summary(symbol, signals)
-        print(report)
-        return True
+        return True, report  # ✅ return report
     except Exception as e:
         print(f"[ERROR] Failed to analyze {symbol}: {e}")
-        return False
+        return False, None
