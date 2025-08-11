@@ -74,6 +74,24 @@ def create_tables(conn):
             PRIMARY KEY(scheme_code, date)
         )
     ''')
+    # Table: request_logs (new)
+    cursor.execute('''
+            CREATE TABLE IF NOT EXISTS request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                source TEXT NOT NULL,          -- 'telegram', 'cli', 'api'
+                chat_id TEXT,                   -- Telegram chat/user ID if available
+                request_type TEXT NOT NULL,     -- 'single_stock', 'nifty_index', etc.
+                request_params TEXT,            -- JSON string of request params
+                data_summary TEXT,              -- JSON summary of fetched data
+                confidence_score REAL,
+                elitewave_trend TEXT,
+                elitewave_wave TEXT,
+                elitewave_confidence REAL,
+                full_report_sent BOOLEAN
+            )
+        ''')
+
 
     conn.commit()
     print("[INIT] All tables created or already exist.")
