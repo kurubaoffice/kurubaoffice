@@ -38,6 +38,11 @@ def format_single_stock_report(symbol, df, signals, confidence):
     ew_wave = last_row.get("elitewave_current_wave", "N/A")
     ew_conf = last_row.get("elitewave_confidence", 0.0)
 
+    # EliteWave interpretation (added)
+    ew_final_dir = last_row.get("elitewave_final_direction", "N/A")
+    ew_strength = last_row.get("elitewave_strength", "N/A")
+    ew_explanation = last_row.get("elitewave_explanation", "N/A")
+
     # Signals
     bullish = [k for k, v in signals.items() if v == "Bullish"]
     bearish = [k for k, v in signals.items() if v == "Bearish"]
@@ -62,10 +67,15 @@ def format_single_stock_report(symbol, df, signals, confidence):
         f"- Bollinger Bands: {round(last_row.get('bb_lower', 0), 2)} – {round(last_row.get('bb_upper', 0), 2)}",
         f"- ATR (14): {round(last_row.get('atr_14', 0), 2)}",
 
-        "\n🌀 *EliteWave Outcome:*",
+         "\n🌀 *EliteWave Outcome:*",
         f"- Trend: {escape_md(ew_trend)}",
         f"- Current Wave: {escape_md(ew_wave)}",
         f"- Confidence: {ew_conf:.1f}%",
+
+        "\n🌀 *EliteWave Interpretation:*",
+        f"- Final Direction: {escape_md(ew_final_dir)}",
+        f"- Strength: {escape_md(ew_strength)}",
+        f"- Explanation: {escape_md(ew_explanation)}",
 
         "\n🧠 *Signal Summary:*",
         f"📈 *Bullish:* {', '.join(bullish) if bullish else 'None'}",

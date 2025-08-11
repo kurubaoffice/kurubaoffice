@@ -77,7 +77,7 @@ def create_tables(conn):
     # Table: request_logs (new)
     cursor.execute('''
             CREATE TABLE IF NOT EXISTS request_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 timestamp TEXT NOT NULL,
                 source TEXT NOT NULL,          -- 'telegram', 'cli', 'api'
                 chat_id TEXT,                   -- Telegram chat/user ID if available

@@ -70,6 +70,12 @@ def apply_indicators(df, config=None):
         df['elitewave_trend'] = ew_result['summary']['trend']
         df['elitewave_current_wave'] = ew_result['summary']['current_wave']
         df['elitewave_confidence'] = ew_result['summary']['confidence']
+
+        # New: store interpreted final direction, strength, explanation
+        df['elitewave_final_direction'] = ew_result['summary'].get('final_direction', None)
+        df['elitewave_strength'] = ew_result['summary'].get('strength', None)
+        df['elitewave_explanation'] = ew_result['summary'].get('explanation', None)
+
         print(f"[DEBUG] After EliteWave: {ew_result['summary']}")
     except Exception as e:
         print(f"[ERROR] EliteWave failed: {e}")

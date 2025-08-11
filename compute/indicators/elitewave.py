@@ -2,7 +2,7 @@
 compute/indicators/elitewave.py
 
 Lightweight pivot-based 'EliteWave' implementation (Elliott-style zigzag + labelling).
-Returns pivot markers and a heuristic confidence score.
+Returns pivot markers, heuristic confidence score, and interpreted final trend direction.
 """
 
 from typing import Tuple, Dict
@@ -112,11 +112,93 @@ def build_wave_labels(df: pd.DataFrame, pivots: pd.Series, price_col: str = "clo
 
     return labels, pprice
 
-def compute_elitewave(df: pd.DataFrame, left: int = 5, right: int = 5, price_col: str = "close") -> Dict:
+def interpret_elitewave(trend_type, wave, prior_trend, confidence):
+    """
+    Convert EliteWave output into a clear final direction and explanation.
+
+    Args:
+        trend_type (str): 'impulsive', 'corrective', 'uptrend', 'downtrend'
+        wave (str): '1'-'5' or 'A','B','C'
+        prior_trend (str): 'bullish' or 'bearish'
+        confidence (float): 0-100
+
+    Returns:
+        dict: {
+            'final_direction': 'Up'/'Down'/'Sideways',
+            'strength': 'Low'/'Moderate'/'High'/'Very High',
+            'explanation': str
+        }
+    """
+    wave = str(wave).upper() if wave else None
+    trend_type = trend_type.lower() if trend_type else None
+    prior_trend = prior_trend.lower() if prior_trend else None
+
+    if confidence >= 90:
+        strength = "Very High"
+    elif confidence >= 75:
+        strength = "High"
+    elif confidence >= 50:
+        strength = "Moderate"
+    else:
+        strength = "Low"
+
+    # Default to Sideways if missing info
+    final_direction = "Sideways"
+    if not wave or not trend_type or not prior_trend:
+        explanation = "Insufficient data for interpretation."
+    else:
+        if trend_type == "impulsive" or trend_type == "uptrend" or trend_type == "downtrend":
+            # treat 'uptrend' and 'downtrend' as impulsive trends
+            if wave in ["1", "3", "5"]:
+                final_direction = "Up" if prior_trend == "bullish" else "Down"
+            elif wave in ["2", "4"]:
+                final_direction = "Down" if prior_trend == "bullish" else "Up"
+            else:
+                if trend_type == "uptrend":
+                    final_direction = "Up"
+                elif trend_type == "downtrend":
+                    final_direction = "Down"
+                else:
+                    final_direction = "Sideways"
+        elif trend_type == "corrective":
+            if wave in ["A", "C"]:
+                final_direction = "Down" if prior_trend == "bullish" else "Up"
+            elif wave == "B":
+                final_direction = "Up" if prior_trend == "bullish" else "Down"
+            else:
+                final_direction = "Sideways"
+        else:
+            final_direction = "Sideways"
+
+        explanation = f"Wave {wave} in a {trend_type} phase after a {prior_trend} trend → Likely move {final_direction.lower()}."
+
+    return {
+        "final_direction": final_direction,
+        "strength": strength,
+        "explanation": explanation
+    }
+
+def compute_elitewave(df: pd.DataFrame, left: int = 5, right: int = 5, price_col: str = "close", prior_trend: str = 'bullish') -> Dict:
     """
     Add EliteWave columns to df (in-place-friendly).
     Returns a summary dict:
-      {'trend': 'up'/'down'/'flat', 'current_wave': '3'/'A'/..., 'confidence': float}
+      {'trend': 'up'/'down'/'corrective'/'flat',
+       'current_wave': '3'/'A'/...,
+       'confidence': float,
+       'num_labels': int,
+       'final_direction': 'Up'/'Down'/'Sideways',
+       'strength': str,
+       'explanation': str
+      }
+
+    Args:
+        df (pd.DataFrame): price dataframe
+        left, right (int): pivot detection window sizes
+        price_col (str): price column to use
+        prior_trend (str): 'bullish' or 'bearish' - previous major trend context for interpretation
+
+    Returns:
+        dict with keys 'df' (dataframe with new cols) and 'summary' (interpretation summary)
     """
     df = df.copy()
     df['ew_pivot'] = detect_pivots(df, left=left, right=right, price_col=price_col)
@@ -124,10 +206,9 @@ def compute_elitewave(df: pd.DataFrame, left: int = 5, right: int = 5, price_col
     df['ew_wave_label'] = labels
     df['ew_pivot_price'] = pprice
 
-    # compute simple confidence:
-    # + more labelled pivots -> higher confidence
+    # compute simple confidence: more labelled pivots = higher confidence
     num_labels = df['ew_wave_label'].count()
-    confidence = min(100.0, num_labels * 10.0)  # simple scaling: each labeled pivot adds 10%
+    confidence = min(100.0, num_labels * 10.0)  # each labeled pivot adds 10%
 
     # current wave label (most recent non-null)
     recent = df['ew_wave_label'].dropna()
@@ -135,7 +216,6 @@ def compute_elitewave(df: pd.DataFrame, left: int = 5, right: int = 5, price_col
 
     # infer trend
     if current_wave in ['1','3','5']:
-        # earlier heuristic: if last motive wave number present, use pivot prices to decide direction
         last5 = df[df['ew_wave_label'].isin(['1','3','5'])]['ew_pivot_price'].dropna()
         if len(last5) >= 2:
             trend = 'up' if last5.iloc[-1] > last5.iloc[0] else 'down'
@@ -146,10 +226,31 @@ def compute_elitewave(df: pd.DataFrame, left: int = 5, right: int = 5, price_col
     else:
         trend = 'flat'
 
+    # Map trend to interpret function's trend_type argument
+    trend_type_map = {
+        'up': 'impulsive',
+        'down': 'impulsive',
+        'corrective': 'corrective',
+        'flat': None
+    }
+    trend_type = trend_type_map.get(trend, None)
+
+    # Get interpreted elitewave output
+    interpretation = interpret_elitewave(
+        trend_type=trend_type,
+        wave=current_wave,
+        prior_trend=prior_trend,
+        confidence=confidence
+    )
+
     summary = {
         'trend': trend,
         'current_wave': str(current_wave) if current_wave is not None else None,
         'confidence': float(confidence),
-        'num_labels': int(num_labels)
+        'num_labels': int(num_labels),
+        'final_direction': interpretation['final_direction'],
+        'strength': interpretation['strength'],
+        'explanation': interpretation['explanation']
     }
+
     return {'df': df, 'summary': summary}
