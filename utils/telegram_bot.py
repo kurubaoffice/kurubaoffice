@@ -7,8 +7,9 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from reporting.report_stock_summary import run_pipeline_for_symbol
-from reporting.report_single_stock import analyze_single_stock
+
 from reporting.report_nifty_analysis import analyze_nifty
+from reporting.report_single_stock import analyze_single_stock
 
 # Set your CSV path
 CSV_PATH = r"C:\Users\KK\PycharmProjects\Tidder2.0\data\raw\listed_companies.csv"
@@ -70,21 +71,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    if text.lower() in ["/start"]:
+    if text.lower() == "/start":
         await handle_start(update, context)
         return
 
-    if text.lower() in ["/help"]:
+    if text.lower() == "/help":
         await handle_help(update, context)
         return
 
     if text.strip().lower() == "nifty50":
-        await context.bot.send_message(chat_id=chat_id, text="📊 Running *NIFTY 50* analysis...", parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id, text="📊 Running NIFTY 50 analysis...")
         try:
             report = analyze_nifty(for_telegram=True)
             chunks = split_message(report)
             for chunk in chunks:
-                await context.bot.send_message(chat_id=chat_id, text=chunk, parse_mode="Markdown")
+                await context.bot.send_message(chat_id=chat_id, text=chunk)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to analyze NIFTY50: {e}")
         return
@@ -94,25 +95,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text="❌ Company not found. Please check the name or symbol.")
         return
 
-    await context.bot.send_message(chat_id=chat_id, text=f"🔍 Processing `{symbol}`...", parse_mode="Markdown")
+    await context.bot.send_message(chat_id=chat_id, text=f"🔍 Processing {symbol}...")
 
     # First try full pipeline (NIFTY50 stocks)
-    success, report  = run_pipeline_for_symbol(symbol, chat_id)
+    success, report = run_pipeline_for_symbol(symbol, chat_id)
     if success and report:
         chunks = split_message(report)
         for chunk in chunks:
-            await context.bot.send_message(chat_id=chat_id, text=chunk, parse_mode="Markdown")
+            await context.bot.send_message(chat_id=chat_id, text=chunk)
         return
 
-    # Else fallback to general stock report
+    # Fallback to general analysis for non-NIFTY50 stocks
     try:
         report = analyze_single_stock(symbol)
         chunks = split_message(report)
+
         for chunk in chunks:
-            await context.bot.send_message(chat_id=chat_id, text=chunk, parse_mode="Markdown")
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=chunk)
+                print(f"[DEBUG] Sent chunk:\n{chunk}")
+            except Exception as send_err:
+                print(f"[ERROR] Failed to send chunk: {send_err}")
+
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to generate report for `{symbol}`", parse_mode="Markdown")
         print(f"[ERROR] analyze_single_stock failed for {symbol}: {e}")
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ Failed to generate report for '{symbol}'"
+            )
+        except Exception as final_err:
+            print(f"[CRITICAL] Failed to send error message: {final_err}")
+
+
 
 # --- Utility: Split long messages ---
 

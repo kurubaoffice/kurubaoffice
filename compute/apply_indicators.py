@@ -8,6 +8,7 @@ def apply_indicators(df, config=None):
     from compute.indicators.atr import apply_atr
     from compute.indicators.bollinger import calculate_bollinger_bands
     from compute.indicators.adx import calculate_adx_from_df
+    from compute.indicators.elitewave import compute_elitewave
     try:
         df = calculate_bollinger_bands(df)
         print("[DEBUG] BB df type:", type(df))
@@ -61,5 +62,16 @@ def apply_indicators(df, config=None):
         print("[DEBUG] After ADX:", type(df))
     except Exception as e:
         print(f"[ERROR] ADX failed: {e}")
+
+    try:
+        ew_result = compute_elitewave(df, left=6, right=6)
+        df = ew_result['df']
+        # Store summary values as columns so reporting can use them
+        df['elitewave_trend'] = ew_result['summary']['trend']
+        df['elitewave_current_wave'] = ew_result['summary']['current_wave']
+        df['elitewave_confidence'] = ew_result['summary']['confidence']
+        print(f"[DEBUG] After EliteWave: {ew_result['summary']}")
+    except Exception as e:
+        print(f"[ERROR] EliteWave failed: {e}")
 
     return df

@@ -39,12 +39,10 @@ def main():
         symbols = df_companies["Symbol"].dropna().unique()
     else:
         symbols = df_companies.iloc[:, 0].dropna().unique()
-
     fetched = 0
     for idx, symbol in enumerate(symbols, 1):
         print(f"[{idx}/{len(symbols)}] Checking: {symbol}")
         latest_date = get_latest_date_for_symbol(symbol)
-
         if latest_date:
             start_date = (latest_date + timedelta(days=1)).strftime("%Y-%m-%d")
             if start_date > END_DATE:
@@ -52,18 +50,15 @@ def main():
                 continue
         else:
             start_date = DEFAULT_START_DATE
-
         print(f"[{idx}] Fetching from {start_date} to {END_DATE} for {symbol}")
         df = fetch_price_for_symbol(symbol, start_date)
 
         if df is not None:
             csv_file = os.path.join(DATA_DIR, f"{symbol}.csv")
             df.to_csv(csv_file, index=False)
-
             insert_price_data(symbol, df)
             fetched += 1
             time.sleep(1)
-
             if idx % 10 == 0:
                 print(f"[INFO] Processed {idx} symbols so far...")
 
