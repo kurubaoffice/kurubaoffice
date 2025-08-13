@@ -90,14 +90,27 @@ def list_available_symbols(data_path):
     return sorted(available_symbols)
 
 
-def load_stock_data(symbol, data_path):
-    """
-    Loads stock CSV for a symbol from data_path.
-    """
-    filepath = os.path.join(data_path, f"{symbol}.csv")
+def load_stock_data(symbol, data_dir):
+    filepath = os.path.join(data_dir, f"{symbol}.csv")
+
     if not os.path.exists(filepath):
-        raise FileNotFoundError(f"CSV file not found for symbol {symbol}: {filepath}")
-    df = pd.read_csv(filepath, parse_dates=["Date", "date"])
-    if "date" in df.columns and "Date" not in df.columns:
-        df["Date"] = pd.to_datetime(df["date"])
+        raise FileNotFoundError(f"No data file found for {symbol}")
+
+    df = pd.read_csv(filepath)
+
+    # Find date column
+    date_col = None
+    for col in ["Date", "date"]:
+        if col in df.columns:
+            date_col = col
+            break
+
+    if not date_col:
+        raise ValueError(f"No date column found for {symbol}")
+
+    # Convert date
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+    df = df.sort_values(by=date_col)
+
     return df

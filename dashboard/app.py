@@ -1,20 +1,29 @@
 import sys
 import os
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
+
 import pandas as pd
-
-# Add project root (parent of dashboard) to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import streamlit as st
+from compute.apply_indicators import apply_indicators
+from utils import load_stock_data
+
 import plotly.graph_objects as go
 
-from utils.data_loader import list_available_symbols, load_stock_data
-from reporting.report_nifty_analysis import analyze_nifty
+#streamlit run app.py
+# --- Project paths ---
 
-# Paths
-COMPANY_LIST_CSV = "../data/raw/listed_companies.csv"     # For dropdown list
-STOCK_DATA_FOLDER = "../data/processed/stocks"           # Where OHLCV CSVs are stored
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+RAW_COMPANY_LIST = os.path.join(BASE_DIR, "data", "raw", "listed_companies.csv")
+PROCESSED_STOCKS_DIR = os.path.join(BASE_DIR, "data", "processed", "stocks")
+PROCESSED_INDEX_DIR = os.path.join(BASE_DIR, "data", "processed", "indexes")
+
+# Add project root to sys.path
+sys.path.insert(0, BASE_DIR)
+
+from utils.data_loader import load_stock_data
+from reporting.report_nifty_analysis import analyze_nifty
 
 
 def list_available_symbols(company_list_path):
@@ -24,10 +33,25 @@ def list_available_symbols(company_list_path):
         raise FileNotFoundError(f"Company list CSV not found: {abs_path}")
 
     df = pd.read_csv(abs_path)
+    print(df.columns)
     return df["symbol"].dropna().unique().tolist()
-COMPANY_LIST_CSV = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "listed_companies.csv")
-symbols = list_available_symbols(COMPANY_LIST_CSV)
+def show_stock_dashboard(symbol, data_dir):
+    try:
+        df = load_stock_data(symbol, data_dir)
+    except Exception as e:
+        st.error(str(e))
+        return
 
+    # If not enough data, show indicator table instead
+    if df.empty or df.shape[0] < 10:
+        st.warning(f"Not enough price data for {symbol}. Showing indicator values instead.")
+        indicators_df = apply_indicators(symbol)  # from Tidder 2.0
+        st.dataframe(indicators_df)
+    else:
+        date_col = "Date" if "Date" in df.columns else "date"
+        st.line_chart(df.set_index(date_col)["Close"])
+
+# --- Streamlit Config ---
 st.set_page_config(page_title="Tidder Dashboard", layout="wide")
 st.title("📊 Tidder 2.0 — Stock Dashboard")
 
@@ -36,13 +60,13 @@ tab1, tab2 = st.tabs(["📈 Stock View", "📊 NIFTY Summary"])
 
 with tab1:
     # List symbols from company list CSV
-    symbols = list_available_symbols(COMPANY_LIST_CSV)
+    symbols = list_available_symbols(RAW_COMPANY_LIST)
     selected_symbol = st.sidebar.selectbox("Select Stock", symbols)
 
     if selected_symbol:
         try:
-            # Load symbol-specific CSV from data folder
-            df = load_stock_data(selected_symbol, STOCK_DATA_FOLDER)
+            # Load symbol-specific CSV from processed stocks folder
+            df = load_stock_data(selected_symbol, PROCESSED_STOCKS_DIR)
 
             # Price Chart
             fig = go.Figure()
@@ -75,7 +99,7 @@ with tab1:
                 st.metric("Confidence Score", f"{df['Confidence'].iloc[-1]:.2f}%")
 
         except FileNotFoundError:
-            st.error(f"Data file for {selected_symbol} not found in {STOCK_DATA_FOLDER}")
+            st.error(f"Data file for {selected_symbol} not found in {PROCESSED_STOCKS_DIR}")
 
 with tab2:
     st.subheader("NIFTY Summary Report")
