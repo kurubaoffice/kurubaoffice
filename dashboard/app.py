@@ -71,7 +71,7 @@ with tab1:
             # Price Chart
             fig = go.Figure()
             fig.add_trace(go.Candlestick(
-                x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+                x=df["date"], open=df["open"], high=df["high"], low=df["low"], close=df["close"],
                 name="Price"
             ))
 
