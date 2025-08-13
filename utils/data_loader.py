@@ -35,11 +35,6 @@ def _clean_df(raw):
     return raw
 
 
-import os
-import pandas as pd
-import yfinance as yf
-
-
 def get_stock_historical(symbol, period="3mo", interval="1d"):
     print(f"[INFO] Fetching stock: {symbol}")
 
@@ -75,3 +70,34 @@ def get_index_historical(symbol="^NSEI", period="3mo", interval="1d"):
     print(f"[🌐] Fetching index: {symbol}")
     raw = yf.download(symbol, period=period, interval=interval, auto_adjust=False, progress=False)
     return _clean_df(raw)
+
+
+# --- New: List symbols filtered by listed_companies.csv ---
+
+LISTED_COMPANIES_CSV = os.path.join(os.path.dirname(__file__), '..', 'data', 'raw', 'listed_companies.csv')
+
+
+def list_available_symbols(data_path):
+    """
+    Returns sorted list of symbols present in both listed_companies.csv
+    and with existing CSV data files in data_path.
+    """
+    df_listed = pd.read_csv(LISTED_COMPANIES_CSV)
+    symbols = df_listed['symbol'].tolist()
+
+    available_symbols = [s for s in symbols if os.path.exists(os.path.join(data_path, f"{s}.csv"))]
+
+    return sorted(available_symbols)
+
+
+def load_stock_data(symbol, data_path):
+    """
+    Loads stock CSV for a symbol from data_path.
+    """
+    filepath = os.path.join(data_path, f"{symbol}.csv")
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"CSV file not found for symbol {symbol}: {filepath}")
+    df = pd.read_csv(filepath, parse_dates=["Date", "date"])
+    if "date" in df.columns and "Date" not in df.columns:
+        df["Date"] = pd.to_datetime(df["date"])
+    return df

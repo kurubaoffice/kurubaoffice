@@ -7,15 +7,31 @@ nlp = spacy.load("en_core_web_sm")
 
 BUY_KEYWORDS = [
     "buy", "good to buy", "should i buy", "can i buy", "is it good to buy",
-    "should i purchase", "recommend buying", "is it a buy"
+    "should i purchase", "recommend buying", "is it a buy",
+    "thinking of buying", "planning to buy", "worth buying", "entry point"
 ]
+
 SELL_KEYWORDS = [
     "sell", "should i sell", "can i sell", "is it good to sell",
-    "recommend selling", "time to sell"
+    "recommend selling", "time to sell", "offload", "exit now",
+    "thinking of selling", "planning to sell", "profit booking", "book profits"
 ]
+
 FUTURE_KEYWORDS = [
-    "future", "outlook", "prediction", "prospects", "forecast", "trend", "expected"
+    "future", "outlook", "prediction", "prospects", "forecast", "trend",
+    "expected", "long term view", "next month", "coming days", "target price"
 ]
+
+HOLD_KEYWORDS = [
+    "hold", "should i hold", "keep holding", "continue holding",
+    "stay invested", "not selling", "hold position", "maintain position"
+]
+
+STOPLOSS_KEYWORDS = [
+    "stop loss", "stoploss", "sl", "protect profits", "limit losses",
+    "set stop", "stop price", "support level", "exit point"
+]
+
 
 def extract_intent_and_symbol(text: str, company_df) -> tuple:
     text_lower = text.lower()

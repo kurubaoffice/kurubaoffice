@@ -15,3 +15,7 @@ telegram~=0.0.1
 python-telegram-bot~=22.3
 tqdm~=4.67.1
 spacy>=3.8.0,<4.0.0
+
+vaderSentiment~=3.3.2
+streamlit~=1.48.0
+plotly~=6.2.0

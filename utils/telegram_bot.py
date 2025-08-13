@@ -40,13 +40,29 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return  # Ignore updates with no text message
+
     chat_id = update.effective_chat.id
     text = update.message.text.strip()
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    if not text:
+    if text.lower() == "/start":
+        await handle_start(update, context)
         return
 
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    if text.lower() == "/help":
+        await handle_help(update, context)
+        return
+
+
+    from nlp.sentiment_analysis import get_sentiment_label
+
+    query = update.message.text.strip()
+    sentiment = get_sentiment_label(query)
+
+    print(f"[Sentiment] Label: {sentiment['label']} | Score: {sentiment['score']}")
+    # You can store this for reporting or tailor bot responses based on tone
 
     if text.lower() == "nifty50":
         await context.bot.send_message(chat_id=chat_id, text="📊 Running NIFTY 50 analysis...")
