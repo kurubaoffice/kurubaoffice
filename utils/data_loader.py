@@ -52,7 +52,7 @@ def get_stock_historical(symbol, period="3mo", interval="1d"):
     return _clean_df(raw)
 
 
-def get_index_historical(symbol="^NSEI", period="3mo", interval="1d"):
+def get_index_historical(symbol="^NSEI", period="9mo", interval="1d"):
     local_path = os.path.join("data", "processed", "index", "NIFTY.csv")
 
     if os.path.exists(local_path):
