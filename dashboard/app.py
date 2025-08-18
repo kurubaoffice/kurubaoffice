@@ -6,6 +6,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
+#streamlit run dashboard/app.py
 # --- Project Paths ---
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, BASE_DIR)
