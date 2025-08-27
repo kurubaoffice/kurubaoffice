@@ -1,21 +1,20 @@
 import React from "react";
 
 export default function StockCard({ title, value, change }) {
+  const positive = change >= 0;
+
   return (
-    <div style={{
-      border: "1px solid #ccc",
-      borderRadius: "8px",
-      padding: "1rem",
-      margin: "0.5rem",
-      width: "200px",
-    }}>
-      <h3>{title}</h3>
-      <p style={{ fontSize: "1.2rem", margin: "0.5rem 0" }}>{value}</p>
-      {change !== undefined && (
-        <p style={{ color: change >= 0 ? "green" : "red" }}>
-          {change >= 0 ? "+" : ""}{change}%
-        </p>
-      )}
+    <div className="bg-white rounded-xl shadow-md p-4 flex flex-col gap-1">
+      <h3 className="text-sm font-medium text-gray-500">{title}</h3>
+      <p className="text-2xl font-bold text-gray-800">₹ {value}</p>
+      <p
+        className={`text-sm font-medium ${
+          positive ? "text-green-600" : "text-red-600"
+        }`}
+      >
+        {positive ? "▲" : "▼"} {change}%
+      </p>
     </div>
   );
 }
+
