@@ -1,20 +1,30 @@
+// src/components/StockCard.jsx
 import React from "react";
 
-export default function StockCard({ title, value, change }) {
-  const positive = change >= 0;
-
+export default function StockCard({ title, value, change, extra }) {
   return (
-    <div className="bg-white rounded-xl shadow-md p-4 flex flex-col gap-1">
+    <div className="bg-white p-4 rounded-xl shadow-md space-y-2">
+      {/* Title */}
       <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-      <p className="text-2xl font-bold text-gray-800">₹ {value}</p>
-      <p
-        className={`text-sm font-medium ${
-          positive ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        {positive ? "▲" : "▼"} {change}%
+
+      {/* Value */}
+      <p className="text-xl font-semibold text-gray-800">
+        {typeof value === "number" ? value.toFixed(2) : value}
       </p>
+
+      {/* Change (if available) */}
+      {change !== null && change !== undefined && (
+        <p
+          className={`text-sm font-medium ${
+            change >= 0 ? "text-green-600" : "text-red-600"
+          }`}
+        >
+          {change >= 0 ? "▲" : "▼"} {change}%
+        </p>
+      )}
+
+      {/* Extra info (interpretation) */}
+      {extra && <p className="text-sm text-gray-600 italic">{extra}</p>}
     </div>
   );
 }
-

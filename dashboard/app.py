@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+#npm run dev
 
 #streamlit run dashboard/app.py
 # --- Project Paths ---
