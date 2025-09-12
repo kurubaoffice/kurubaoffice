@@ -35,7 +35,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "📖 *Bot Help Menu*\n\n"
         "Commands:\n"
-        "➡️ `/stock TCS` – Analyze a stock\n"
+        "➡️ Give stock code (Ex: TCS )  – Analyze a stock\n"
         "➡️ `nifty50` – Analyze the NIFTY 50 index\n"
         "➡️ `/usage` – Check your request usage\n"
         "➡️ `/subscribe` – Upgrade for unlimited access (coming soon)"
