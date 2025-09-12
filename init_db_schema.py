@@ -91,9 +91,30 @@ def create_tables(conn):
                 full_report_sent BOOLEAN
             )
         ''')
+    # Create users table
+    cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id BIGINT PRIMARY KEY, -- Telegram user_id
+                is_subscribed BOOLEAN DEFAULT FALSE,
+                subscription_expiry TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
 
+    # Create request logs
+    cursor.execute("""
+            CREATE TABLE IF NOT EXISTS request_logs (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+                requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
 
     conn.commit()
+    cursor.close()
+    conn.close()
+
+ #   conn.commit()
     print("[INIT] All tables created or already exist.")
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ export default function StockAnalysis() {
   // Fetch stock analysis when symbol changes
   useEffect(() => {
     if (!symbol) return;
+
     async function fetchData() {
       try {
         const result = await getStockAnalysis(symbol);
@@ -39,6 +40,7 @@ export default function StockAnalysis() {
         console.error("Error fetching stock data:", err);
       }
     }
+
     fetchData();
   }, [symbol]);
 
@@ -113,56 +115,55 @@ export default function StockAnalysis() {
       </div>
 
       {/* Overview Card */}
-      {/* Overview Card */}
       <div className="bg-white shadow-lg rounded-xl p-6">
         <h2 className="text-xl font-bold text-gray-800 mb-4">Overview</h2>
 
-        <div className="grid grid-cols-3 gap-6 text-gray-700">
+        {/* Horizontal grid layout */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-gray-700">
           <div>
-            <p className="font-medium">Price</p>
-            <p className="font-bold">₹{price}</p>
+            <strong>Price:</strong> ₹{price}
           </div>
           <div>
-            <p className="font-medium">Change</p>
-            <p
-              className={`font-bold ${
-                changePercent > 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
+            <strong>Change:</strong>{" "}
+            <span className={changePercent > 0 ? "text-green-600" : "text-red-600"}>
               {changePercent}%
-            </p>
+            </span>
           </div>
           <div>
-            <p className="font-medium">Day High</p>
-            <p className="font-bold">₹{dayHigh}</p>
+            <strong>Day High:</strong> ₹{dayHigh}
           </div>
           <div>
-            <p className="font-medium">Day Low</p>
-            <p className="font-bold">₹{dayLow}</p>
+            <strong>Day Low:</strong> ₹{dayLow}
           </div>
           <div>
-            <p className="font-medium">52W High</p>
-            <p className="font-bold">₹{yearHigh}</p>
+            <strong>52W High:</strong> ₹{yearHigh}
           </div>
           <div>
-            <p className="font-medium">52W Low</p>
-            <p className="font-bold">₹{yearLow}</p>
+            <strong>52W Low:</strong> ₹{yearLow}
           </div>
           <div>
-            <p className="font-medium">Market Cap</p>
-            <p className="font-bold">{marketCap}</p>
+            <strong>Market Cap:</strong> ₹{data.marketCap ?? "-"}
           </div>
           <div>
-            <p className="font-medium">Volume</p>
-            <p className="font-bold">{volume}</p>
+            <strong>PE Ratio:</strong> {data.peRatio ?? "-"}
           </div>
           <div>
-            <p className="font-medium">Avg. Volume</p>
-            <p className="font-bold">{avgVolume}</p>
+            <strong>ROE:</strong> {data.roe != null ? data.roe + "%" : "-"}%
+          </div>
+          <div>
+            <strong>EPS:</strong> {data.eps ?? "-"}
+          </div>
+          <div>
+            <strong>Promoter Holding:</strong> {data.promoterHolding != null ? data.promoterHolding + "%" : "-"}%
+          </div>
+          <div>
+            <strong>Institutional Holding:</strong> {data.institutionalHolding != null ? data.institutionalHolding + "%" : "-"}%
+          </div>
+          <div>
+            <strong>Last Updated:</strong> {data.lastUpdated}
           </div>
         </div>
       </div>
-
 
       {/* Later: Indicators, Chart, Insights, etc. */}
     </div>
