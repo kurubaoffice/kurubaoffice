@@ -10,6 +10,9 @@ from reporting.report_single_stock import analyze_single_stock
 from utils.nlp_utils import extract_intent_and_symbol
 from utils.subscription_utils import can_user_request, log_user_request, get_user_usage
 
+
+
+
 load_dotenv()
 
 CSV_PATH = r"C:\Users\KK\PycharmProjects\Tidder2.0\data\raw\listed_companies.csv"
@@ -37,6 +40,8 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "➡️ Give stock code (Ex: TCS )  – Analyze a stock\n"
         "➡️ `nifty50` – Analyze the NIFTY 50 index\n"
+        "➡️ `marubozu` – Uptrend stocks\n"
+        "➡️ `RSID` – RSI divergence scan\n"
         "➡️ `/usage` – Check your request usage\n"
         "➡️ `/subscribe` – Upgrade for unlimited access (coming soon)"
     )
@@ -69,11 +74,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-    text = update.message.text.strip()
+    text = update.message.text.strip().upper()
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    # Check limit
+        # ───────────────────────────────
+    # Daily limit check
+    # ───────────────────────────────
     if not can_user_request(user_id):
         await context.bot.send_message(
             chat_id=chat_id,
@@ -82,10 +89,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Log usage
     log_user_request(user_id)
 
-    if text.lower() == "nifty50":
+    # ───────────────────────────────
+    # NIFTY50 Command
+    # ───────────────────────────────
+    if text == "NIFTY50":
         await context.bot.send_message(chat_id=chat_id, text="📊 Running NIFTY 50 analysis...")
         try:
             report = analyze_nifty(for_telegram=True)
@@ -95,7 +104,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Failed to analyze NIFTY50: {e}")
         return
 
-    # NLP intent + symbol
+    # ───────────────────────────────
+    # NLP intent + stock analysis
+    # ───────────────────────────────
     intent, symbol = extract_intent_and_symbol(text, company_df)
 
     if not symbol:
@@ -118,6 +129,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Error analyzing {symbol}: {e}")
+
 
 # ────────────────────────────────────────────
 # 🔹 Utilities

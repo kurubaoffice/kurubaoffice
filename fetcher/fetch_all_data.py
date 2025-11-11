@@ -24,7 +24,7 @@ def fetch_and_save(symbol, is_index=False):
     """Fetch last ~3 years of data for a symbol and save to CSV with clean standardized format."""
     try:
         yf_symbol = SYMBOL_MAP.get(symbol, f"{symbol}.NS" if not is_index else symbol)
-        start_date = datetime.now() - timedelta(days=1000)
+        start_date = datetime.now() - timedelta(days=3000)
 
         data = yf.download(
             yf_symbol,

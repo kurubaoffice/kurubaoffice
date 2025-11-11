@@ -89,9 +89,10 @@ def format_single_stock_report(symbol, df, signals, confidence):
 def analyze_single_stock(symbol, period="9mo", interval="1d", return_json=False):
     df = get_stock_historical(symbol, period=period, interval=interval)
     df = apply_indicators(df)
+
+    # No need to compute RSI divergences anymore
     signals = interpret_signals(df)
     confidence = compute_confidence_score(signals)
-
     formatted = format_single_stock_report(symbol, df, signals, confidence)
 
     if return_json:
@@ -104,3 +105,4 @@ def analyze_single_stock(symbol, period="9mo", interval="1d", return_json=False)
         }
 
     return formatted
+
