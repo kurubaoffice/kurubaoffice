@@ -9,6 +9,8 @@ from reporting.report_nifty_analysis import analyze_nifty
 from reporting.report_single_stock import analyze_single_stock
 from utils.nlp_utils import extract_intent_and_symbol
 from utils.subscription_utils import can_user_request, log_user_request, get_user_usage
+from integration.mcp_client import get_mcp_enrichment
+
 
 
 
@@ -118,7 +120,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         success, report = run_pipeline_for_symbol(symbol, chat_id)
         if success and report:
-            for chunk in split_message(report):
+            # 💡 MCP Enrichment before sending to Telegram
+            enriched_report = enrich_with_mcp(report, symbol)
+            for chunk in split_message(enriched_report):
                 await context.bot.send_message(chat_id=chat_id, text=chunk)
             return
 
@@ -147,6 +151,34 @@ def split_message(text, max_length=4000):
     if chunk:
         chunks.append(chunk)
     return chunks
+
+def enrich_with_mcp(report: str, symbol: str) -> str:
+    """Optionally append MCP-provided info/news to the existing report."""
+    data = get_mcp_enrichment(symbol)
+    if not data:
+        return report
+
+    # Add company info (if available)
+    info = data.get("company_info", {})
+    if info:
+        company_block = (
+            f"🏢 *{info.get('name', symbol)}*\n"
+            f"Sector: {info.get('sector', '—')}\n"
+            f"Market Cap: {info.get('market_cap', '—')}\n\n"
+        )
+        report = company_block + report
+
+    # Add latest news
+    news_items = data.get("latest_news", [])
+    if news_items:
+        news_block = "\n🗞 *Latest News:*"
+        for n in news_items[:3]:
+            headline = n.get("headline", "")
+            source = n.get("source", "")
+            news_block += f"\n• {headline} ({source})"
+        report += "\n\n" + news_block
+
+    return report
 
 # ────────────────────────────────────────────
 # 🔹 Main
