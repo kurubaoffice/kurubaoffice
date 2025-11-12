@@ -178,7 +178,7 @@ def enrich_with_mcp(report: str, symbol: str, chat_id=None, bot=None, max_news=5
             # Remove any URL at the end
             n_clean = re.sub(r"\s*\(https?://.*\)", "", n)  # removes "(https://...)"
             n_clean = n_clean.lstrip("• ").strip()  # remove any leading bullet or spaces
-            news_block += f"\n- {n_clean}"
+            news_block += f"\n- {n_clean}\n"
         report += "\n\n" + news_block
 
     # Send top 3 headlines to Telegram if bot is provided
