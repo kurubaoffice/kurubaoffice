@@ -1,9 +1,10 @@
 import os
+import re
 import pandas as pd
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
+import asyncio
 from reporting.report_stock_summary import run_pipeline_for_symbol
 from reporting.report_nifty_analysis import analyze_nifty
 from reporting.report_single_stock import analyze_single_stock
@@ -152,13 +153,14 @@ def split_message(text, max_length=4000):
         chunks.append(chunk)
     return chunks
 
-def enrich_with_mcp(report: str, symbol: str) -> str:
-    """Optionally append MCP-provided info/news to the existing report."""
+
+def enrich_with_mcp(report: str, symbol: str, chat_id=None, bot=None, max_news=5) -> str:
+    """Append MCP-provided info/news to the report and optionally send top headlines to Telegram."""
     data = get_mcp_enrichment(symbol)
     if not data:
         return report
 
-    # Add company info (if available)
+    # Add company info
     info = data.get("company_info", {})
     if info:
         company_block = (
@@ -169,16 +171,36 @@ def enrich_with_mcp(report: str, symbol: str) -> str:
         report = company_block + report
 
     # Add latest news
-    news_items = data.get("latest_news", [])
+    news_items = data.get("news", [])
     if news_items:
-        news_block = "\n🗞 *Latest News:*"
-        for n in news_items[:3]:
-            headline = n.get("headline", "")
-            source = n.get("source", "")
-            news_block += f"\n• {headline} ({source})"
+        news_block = "🗞 *Latest News:*"
+        for n in news_items[:5]:
+            # Remove any URL at the end
+            n_clean = re.sub(r"\s*\(https?://.*\)", "", n)  # removes "(https://...)"
+            n_clean = n_clean.lstrip("• ").strip()  # remove any leading bullet or spaces
+            news_block += f"\n- {n_clean}"
         report += "\n\n" + news_block
 
+    # Send top 3 headlines to Telegram if bot is provided
+    if chat_id and bot and news_items:
+        top_headlines = []
+        for n in news_items[:3]:
+            match = re.match(r"^\s*•?\s*(.*?)\s*-\s*(https?://.*)", n)
+            if match:
+                headline, url = match.groups()
+                top_headlines.append(f"• [{headline}]({url})")
+            else:
+                top_headlines.append(f"• {n.strip()}")
+        asyncio.create_task(
+            bot.send_message(
+                chat_id=chat_id,
+                text=f"🗞 *Top MCP News for {symbol}:*\n" + "\n".join(top_headlines),
+                parse_mode="Markdown"
+            )
+        )
+
     return report
+
 
 # ────────────────────────────────────────────
 # 🔹 Main
