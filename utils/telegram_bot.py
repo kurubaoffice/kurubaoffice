@@ -43,6 +43,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "➡️ Give stock code (Ex: TCS )  – Analyze a stock\n"
         "➡️ `nifty50` – Analyze the NIFTY 50 index\n"
+        "➡️ `/bnf_oc` – Analyze the BANK NIFTY index Option\n"
         "➡️ `marubozu` – Uptrend stocks\n"
         "➡️ `RSID` – RSI divergence scan\n"
         "➡️ `/usage` – Check your request usage\n"
@@ -201,6 +202,49 @@ def enrich_with_mcp(report: str, symbol: str, chat_id=None, bot=None, max_news=5
 
     return report
 
+# ────────────────────────────────────────────
+# 🔹 BankNifty Option Chain Command
+# ────────────────────────────────────────────
+
+from fetcher.fetch_banknifty_option_chain import fetch_banknifty_option_chain
+from compute.options.strike_selector import pick_best_ce_pe
+from reporting.report_option_summary_html import build_option_alert_html
+
+async def handle_bnf_oc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    await context.bot.send_message(chat_id=chat_id, text="📥 Fetching BankNifty Option Chain...")
+
+    try:
+        # Fetch ONLY ONCE
+        oc_df = fetch_banknifty_option_chain()
+
+        if oc_df is None or oc_df.empty:
+            await context.bot.send_message(chat_id=chat_id, text="❌ Could not fetch option chain (empty).")
+            return
+
+        # Extract spot
+        try:
+            spot = float(oc_df["spot"].iloc[0])
+        except:
+            await context.bot.send_message(chat_id=chat_id, text="⚠ Error: spot price missing in data.")
+            return
+
+        # Get best CE & PE
+        picks = pick_best_ce_pe(oc_df, spot)
+
+        # Build summary HTML
+        html = build_option_alert_html(picks, oc_df, spot)
+
+        await context.bot.send_message(chat_id=chat_id, text=html, parse_mode="HTML")
+
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"⚠ Error: {e}")
+
+
+
+
+
 
 # ────────────────────────────────────────────
 # 🔹 Main
@@ -213,6 +257,8 @@ def main():
     app.add_handler(CommandHandler("usage", handle_usage))
     app.add_handler(CommandHandler("subscribe", handle_subscribe))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("bnf_oc", handle_bnf_oc))
+
 
     print("🤖 Tidder Bot is running...")
     app.run_polling()
