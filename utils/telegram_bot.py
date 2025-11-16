@@ -15,6 +15,8 @@ from integration.mcp_client import get_mcp_enrichment
 
 
 
+import asyncio
+#from services.zerodha_oi import ZerodhaOIService
 
 load_dotenv()
 
@@ -242,6 +244,30 @@ async def handle_bnf_oc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"⚠ Error: {e}")
 
 
+async def handle_bnf_live(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    await context.bot.send_message(chat_id=chat_id, text="📥 Fetching BANKNIFTY live from Zerodha...")
+
+    try:
+        # call Zerodha in a thread to avoid blocking event loop
+        def _fetch():
+            zs = ZerodhaOIService()
+            df, spot = zs.fetch_option_chain()
+            return df, spot
+
+        oc_df, spot = await asyncio.to_thread(_fetch)
+
+        if oc_df is None or oc_df.empty:
+            await context.bot.send_message(chat_id=chat_id, text="❌ Zerodha returned empty option chain.")
+            return
+
+        # reuse your existing pipeline: pick_best_ce_pe and build_option_alert_html
+        picks = pick_best_ce_pe(oc_df, float(spot))
+        html = build_option_alert_html(picks, oc_df, float(spot), trend_text="Live Zerodha feed")
+        await context.bot.send_message(chat_id=chat_id, text=html, parse_mode="HTML")
+
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"⚠ Zerodha live error: {e}")
 
 
 
@@ -258,7 +284,7 @@ def main():
     app.add_handler(CommandHandler("subscribe", handle_subscribe))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CommandHandler("bnf_oc", handle_bnf_oc))
-
+    app.add_handler(CommandHandler("bnf_live", handle_bnf_live))
 
     print("🤖 Tidder Bot is running...")
     app.run_polling()
