@@ -24,7 +24,8 @@ CSV_PATH = r"C:\Users\KK\PycharmProjects\Tidder2.0\data\raw\listed_companies.csv
 company_df = pd.read_csv(CSV_PATH)
 
 token = os.getenv("TELEGRAM_TOKEN")
-
+from compute.options.option_rr_scanner import process_option_rr_telegram
+import asyncio
 # ────────────────────────────────────────────
 # 🔹 Commands
 # ────────────────────────────────────────────
@@ -46,6 +47,9 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "➡️ Give stock code (Ex: TCS )  – Analyze a stock\n"
         "➡️ `nifty50` – Analyze the NIFTY 50 index\n"
         "➡️ `/bnf_oc` – Analyze the BANK NIFTY index Option\n"
+        "➡️ `STOCKNAME-CE` – Eg: TCS-CE will give Current month CE Option\n"
+        "➡️ `STOCKNAME-PE` – Eg: TCS-CE will give Current month PE Option\n"
+        "➡️ `STOCKNAME-CEPE` – Eg: TCS-CEPE will give Current month CE & PE Option\n"
         "➡️ `marubozu` – Uptrend stocks\n"
         "➡️ `RSID` – RSI divergence scan\n"
         "➡️ `/usage` – Check your request usage\n"
@@ -80,11 +84,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-    text = update.message.text.strip().upper()
+    text_raw = update.message.text.strip()
+    text = text_raw.upper()
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-        # ───────────────────────────────
+    # ───────────────────────────────
+    # Option RR Scan Detection
+    # ───────────────────────────────
+    # Matches: ICICIBANK-CE / ICICIBANKCE / RELIANCE4200CE / SBIN24JANPE etc.
+    option_pattern = r"([A-Z]{2,15})(\d{2,4}[A-Z]{3})?[-]?(CE|PE)$"
+
+    m = re.search(option_pattern, text)
+    if m:
+        await context.bot.send_message(chat_id=chat_id, text="📥 Fetching option chain… calculating RR…")
+
+        try:
+            result = await process_option_rr_telegram(text)
+            await context.bot.send_message(chat_id=chat_id, text=result, parse_mode="Markdown")
+        except Exception as e:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"❌ Option RR scan failed:\n`{e}`",
+                parse_mode="Markdown"
+            )
+        return
+
+    # ───────────────────────────────
     # Daily limit check
     # ───────────────────────────────
     if not can_user_request(user_id):
@@ -124,19 +150,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         success, report = run_pipeline_for_symbol(symbol, chat_id)
         if success and report:
-            # 💡 MCP Enrichment before sending to Telegram
             enriched_report = enrich_with_mcp(report, symbol)
             for chunk in split_message(enriched_report):
                 await context.bot.send_message(chat_id=chat_id, text=chunk)
             return
 
-        # fallback single stock
+        # Fallback single stock
         report = analyze_single_stock(symbol)
         for chunk in split_message(report):
             await context.bot.send_message(chat_id=chat_id, text=chunk)
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Error analyzing {symbol}: {e}")
+
 
 
 # ────────────────────────────────────────────
@@ -270,7 +296,22 @@ async def handle_bnf_live(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"⚠ Zerodha live error: {e}")
 
 
+async def handle_user_message(update, context):
+    text = update.message.text.strip()
 
+    # Detect option RR scan request
+    if "-CE" in text.upper() or "-PE" in text.upper():
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(process_option_rr_telegram(text))
+        update.message.reply_text(result, parse_mode="Markdown")
+        await update.message.reply_text("⏳ Scanning option chain… please wait 2–5 seconds…")
+
+        try:
+            formatted = await process_option_rr_telegram(text)
+            await update.message.reply_text(formatted, parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Error: {e}")
+        return
 
 # ────────────────────────────────────────────
 # 🔹 Main
