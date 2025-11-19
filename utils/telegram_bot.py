@@ -17,8 +17,13 @@ from integration.mcp_client import get_mcp_enrichment
 
 import asyncio
 #from services.zerodha_oi import ZerodhaOIService
+# add these imports near other imports
+from compute.options.option_rr_scanner import get_expiry_menu_and_state, process_option_rr_telegram, parse_tg_input
 
 load_dotenv()
+# pending expiry selection state per chat
+# structure: { chat_id: {"message_text": original_user_text, "state": state_dict_from_scanner, "timestamp": datetime } }
+pending_expiry = {}
 
 CSV_PATH = r"C:\Users\KK\PycharmProjects\Tidder2.0\data\raw\listed_companies.csv"
 company_df = pd.read_csv(CSV_PATH)
@@ -74,6 +79,74 @@ async def handle_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode="Markdown")
 
+import calendar
+from datetime import datetime
+
+MONTH_MAP = {
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12
+}
+
+def parse_option_input(text):
+    """
+    Supports:
+        RELIANCE-CE
+        RELIANCE-PE
+        RELIANCE-CEPE
+        RELIANCE-CE-DEC
+        RELIANCE-PE-NOV
+        RELIANCE-CE-25APR
+    """
+
+    text = text.upper().replace(" ", "")
+
+    pattern = r"([A-Z]{2,20})-(CE|PE|CEPE)(?:-(\d{2})?([A-Z]{3}))?$"
+    m = re.match(pattern, text)
+
+    if not m:
+        return None
+
+    stock, opt_type, day, month_str = m.groups()
+
+    today = datetime.today()
+
+    # Determine expiry
+    if month_str:
+        month = MONTH_MAP.get(month_str)
+        year = today.year
+
+        if month < today.month:
+            year += 1
+
+        if day:
+            expiry = datetime(year, month, int(day))
+        else:
+            # Monthly expiry → last Thursday
+            expiry = get_monthly_expiry(year, month)
+
+    else:
+        # No month specified → nearest weekly expiry
+        expiry = get_nearest_expiry(today)
+
+    return {
+        "stock": stock,
+        "type": opt_type,
+        "expiry": expiry.strftime("%Y-%m-%d")
+    }
+
+
+def get_monthly_expiry(year, month):
+    last_day = datetime(year, month, calendar.monthrange(year, month)[1])
+    while last_day.weekday() != 3:  # Thursday
+        last_day = last_day.replace(day=last_day.day - 1)
+    return last_day
+
+
+def get_nearest_expiry(date):
+    while date.weekday() != 3:  # Thursday
+        date = date.replace(day=date.day + 1)
+    return date
+
 # ────────────────────────────────────────────
 # 🔹 Main Message Handler
 # ────────────────────────────────────────────
@@ -89,23 +162,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
+    # --- Numeric selection handling (if user replies with '1', '2', etc. to choose expiry) ---
+    if re.fullmatch(r"\d{1,3}", text.strip()):
+        if chat_id in pending_expiry:
+            idx = int(text.strip()) - 1
+            saved = pending_expiry.pop(chat_id, None)
+            if not saved:
+                await context.bot.send_message(chat_id=chat_id, text="⚠️ Session expired. Please resend the stock command.")
+                return
+
+            original_user_text = saved["message_text"]
+            expiries = saved["state"]["expiries"]
+            if idx < 0 or idx >= len(expiries):
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Invalid choice. Please send a number between 1 and {len(expiries)}.")
+                return
+
+            # Run the scan for the selected expiry (idx)
+            await context.bot.send_message(chat_id=chat_id, text=f"📥 Running scan for expiry *{expiries[idx]}* …", parse_mode="Markdown")
+            try:
+                result = await process_option_rr_telegram(original_user_text, expiry_selection=idx, desired_rr=2.0)
+                await context.bot.send_message(chat_id=chat_id, text=result, parse_mode="Markdown")
+            except Exception as e:
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Option scan failed: {e}")
+            return
+
     # ───────────────────────────────
     # Option RR Scan Detection
     # ───────────────────────────────
     # Matches: ICICIBANK-CE / ICICIBANKCE / RELIANCE4200CE / SBIN24JANPE etc.
-    option_pattern = r"([A-Z]{2,15})(\d{2,4}[A-Z]{3})?[-]?(CE|PE)$"
+    parsed = parse_option_input(text)
 
-    m = re.search(option_pattern, text)
-    if m:
-        await context.bot.send_message(chat_id=chat_id, text="📥 Fetching option chain… calculating RR…")
+    if parsed:
+        stock = parsed["stock"]
+        opt_type = parsed["type"]
+        expiry = parsed["expiry"]
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"📥 Fetching {stock} {opt_type} for expiry *{expiry}*…",
+            parse_mode="Markdown"
+        )
 
         try:
-            result = await process_option_rr_telegram(text)
+            # Build formatted command for RR scanner
+            rr_query = f"{stock}-{opt_type}-{expiry}"
+            result = await process_option_rr_telegram(rr_query)
             await context.bot.send_message(chat_id=chat_id, text=result, parse_mode="Markdown")
         except Exception as e:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"❌ Option RR scan failed:\n`{e}`",
+                text=f"❌ Option scan failed:\n`{e}`",
                 parse_mode="Markdown"
             )
         return

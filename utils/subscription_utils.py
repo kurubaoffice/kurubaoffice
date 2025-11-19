@@ -16,7 +16,7 @@ DB_CONFIG = {
 }
 
 # 🔢 Free user request limit per day
-FREE_LIMIT_PER_DAY = 20
+FREE_LIMIT_PER_DAY = 6
 
 # ─────────────────────────────────────
 # 🔌 DB Connection Helper
