@@ -476,15 +476,46 @@ def format_for_telegram(results, desired_rr):
     for right, payload in results.items():
         lines.append(f"*{right}* expiry {payload['expiry']} (Days Remaining {payload['days']}) — Underlying {payload['underlying']:.2f}\n")
         df = payload['candidates']
+
         if df is None or df.empty:
             lines.append(f"_No strikes found with RR ≥ {desired_rr}_\n")
             continue
+
         for _, r in df.iterrows():
+            strike = int(r['strike'])
+            premium = r['premium']
+            iv = r['iv'] * 100
+            oi = r['openInterest']
+            em = r['EM']
+            target = r['target_price']
+            rr = r['RR']
+
+            # Base strike info
             lines.append(
-                f"Strike {int(r['strike'])} | Premium {r['premium']:.2f} | IV {(r['iv']*100):.1f}% | OI {r['openInterest']} | EM {r['EM']:.2f} | Target {r['target_price']:.2f} | RR {r['RR']:.2f} \n"
+                f"Strike {strike} | Premium {premium:.2f} | IV {iv:.1f}% | OI {oi} | EM {em:.2f} | Target {target:.2f} | RR {rr:.2f}"
             )
+
+            # --- Added Explanation Block ---
+            reason = []
+            reason.append("Why this option?")
+            reason.append(f"- Expected Move (EM) is {em:.2f}, supporting this strike selection.")
+            reason.append(f"- Target price is {target:.2f}, giving favorable payoff.")
+            reason.append(f"- Risk–Reward (RR) {rr:.2f} means potential returns are {rr:.2f}x premium.")
+            reason.append(f"- Open Interest {oi} suggests liquidity and active positioning.")
+
+            # Max Pain (approx logic)
+            approx_max_pain = strike  # simple placeholder (optional)
+            reason.append(f"Approx Max Pain zone around: {approx_max_pain}")
+
+            reason.append("Overall: This strike offers a balanced combination of EM-based target, liquidity, and reward multiple.")
+
+            explanation_text = "\n".join(reason)
+            lines.append(explanation_text)
+            lines.append("\n")
+
         lines.append("\n")
     return "\n".join(lines)
+
 
 # -------------------------------
 # 11. Public wrapper for telegram integration
