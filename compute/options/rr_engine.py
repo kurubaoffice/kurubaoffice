@@ -402,15 +402,16 @@ def format_for_telegram(results: Dict, desired_rr: float) -> str:
             # Format lines
             iv_pct = iv * 100.0
             lines.append(
-                f"Strike {int(K)} | Premium {premium:.2f} | IV {iv_pct:.1f}% | OI {int(r.get('openInterest',0))} | "
-                f"EM {r.get('EM'):.2f} | Target {r.get('target_price'):.2f} | RR {r.get('RR'):.2f}"
-            )
-            lines.append(f"📌 Why this strike?")
+                f"Strike {int(K)} " )
+            lines.append(f"• Premium: {premium:.2f}")
+            lines.append(f"• openInterest: {int(r.get('openInterest',0))}")
+            lines.append(f"• Target Price: {r.get('target_price'):.2f}")
+            lines.append("")
             lines.append(f"• Breakeven: {breakeven:.2f}")
             lines.append(f"• Probability of Profit: {(pop*100):.1f}%  — probability of finishing ITM")
-            lines.append(f"• Reward: ₹{max_reward:.2f}  | Risk: ₹{max_risk:.2f}  | Reward/Risk: { (max_reward/max_risk) if max_risk>0 else float('inf') :.2f}")
-            lines.append(f"• Greeks: Δ {greeks['delta']:.2f} | Γ {greeks['gamma']:.4f} | Θ {greeks['theta']:.3f}/day | Vega {greeks['vega']:.2f}")
-            lines.append(f"• Note: EM {r.get('EM'):.2f} implies target {r.get('target_price'):.2f} (used for RR calc).")
+            #lines.append(f"• Reward: ₹{max_reward:.2f}  | Risk: ₹{max_risk:.2f}  | Reward/Risk: { (max_reward/max_risk) if max_risk>0 else float('inf') :.2f}")
+            #lines.append(f"• Greeks: Δ {greeks['delta']:.2f} | Γ {greeks['gamma']:.4f} | Θ {greeks['theta']:.3f}/day | Vega {greeks['vega']:.2f}")
+            #lines.append(f"• Note: EM {r.get('EM'):.2f} implies target {r.get('target_price'):.2f} (used for RR calc).")
             lines.append("")  # empty line between strikes
 
             # ---------------- EXIT PLAN (3 METHODS) ----------------
@@ -419,13 +420,13 @@ def format_for_telegram(results: Dict, desired_rr: float) -> str:
             iv_pct = r['iv'] * 100
 
             if iv_pct < 12:
-                risk_tag = "🟢 Low Risk (IV < 12%)"
+                risk_tag = "Low Risk (IV < 12%)"
             elif iv_pct < 20:
-                risk_tag = "🟡 Moderate Risk (12–20%)"
+                risk_tag = "Moderate Risk (12–20%)"
             elif iv_pct < 30:
-                risk_tag = "🟠 High Risk (20–30%)"
+                risk_tag = "High Risk (20–30%)"
             else:
-                risk_tag = "🔴 Very High Risk (IV > 30%)"
+                risk_tag = "Very High Risk (IV > 30%)"
 
             # 1) Premium-based Stop Loss based on IV%
             iv_pct = r['iv'] * 100
@@ -451,11 +452,11 @@ def format_for_telegram(results: Dict, desired_rr: float) -> str:
                 oi_exit_msg = "Exit if PE OI drops >20% or CE OI rises >20%"
 
             # Final Output Block
-            lines.append("🛑 *Exit Plan*")
+            lines.append("***** Exit Plan *****")
             lines.append(f"• {risk_tag}")
             lines.append(f"• SL Premium: `{sl_premium:.2f}`")
-            lines.append(f"• Price-Action Exit (Underlying): `{pa_exit:.2f}`")
-            lines.append(f"• OI Trend Exit: {oi_exit_msg}")
+            #lines.append(f"• Price-Action Exit (Underlying): `{pa_exit:.2f}`")
+            #lines.append(f"• OI Trend Exit: {oi_exit_msg}")
             lines.append("")
 
     return "\n".join(lines)

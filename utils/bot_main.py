@@ -6,6 +6,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from typing import Optional, Tuple, Dict, Any, List
 
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -46,6 +47,19 @@ from reporting.report_stock_summary import run_pipeline_for_symbol
 from reporting.report_nifty_analysis import analyze_nifty
 from reporting.report_single_stock import analyze_single_stock
 from integration.mcp_client import get_mcp_enrichment
+from nlp.intent_model.intent_classifier import predict_intent
+from nlp.extract_entities import extract_stock_entity
+from nlp.language_handler import translate_to_english
+from nlp.context_manager import context
+from telegram import ReplyKeyboardMarkup
+from compute.options.fno_snapshot import fetch_fno_snapshot, get_top_movers
+# FnO imports
+from telegram import ReplyKeyboardMarkup
+from utils.logo_utils import get_company_details
+from compute.options.fno_analysis import analyze_fno_stock
+from compute.options.fno_snapshot import fetch_fno_snapshot, get_top_movers
+
+
 
 # ---------- config ----------
 load_dotenv()
@@ -70,10 +84,13 @@ def ik_main_menu() -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton("📈 Stock Analysis", callback_data="stock_menu")],
         [InlineKeyboardButton("⚡ Options Analysis", callback_data="opt_menu")],
+        [InlineKeyboardButton("🧿 FnO Dashboard", callback_data="fno_menu")],   # 🔥 NEW
+        [InlineKeyboardButton("📈 Market Volatility", callback_data="idx_volatility")],  # 🔥 NEW
         [InlineKeyboardButton("📊 Index Tools", callback_data="index_menu")],
         [InlineKeyboardButton("ℹ️ Help", callback_data="help_menu")],
     ]
     return InlineKeyboardMarkup(keyboard)
+
 
 
 def ik_persistent() -> InlineKeyboardMarkup:
@@ -102,14 +119,30 @@ def ik_index_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📘 NIFTY Summary", callback_data="idx_nifty")],
         [InlineKeyboardButton("📙 BANKNIFTY Summary", callback_data="idx_banknifty")],
         [InlineKeyboardButton("🔥 OI Heatmap", callback_data="idx_heatmap")],
+        [InlineKeyboardButton("📉 Volatility Strategy", callback_data="idx_volatility")],
         [InlineKeyboardButton("⬅️ Back", callback_data="back_main")]
     ])
+def ik_fno_menu() -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton("📈 Top Gainers", callback_data="fno_gainers")],
+        [InlineKeyboardButton("📉 Top Losers", callback_data="fno_losers")],
+        [InlineKeyboardButton("🔎 Search FnO Stock", callback_data="fno_search")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="back_main")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 
 def ik_help_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="back_main")]])
 
-
+def format_top_list(df, title):
+    lines = [f"<b>{title}</b>\n"]
+    for _, row in df.iterrows():
+        lines.append(
+            f"{row['symbol']}  {row['change_pct']:.2f}%\n"
+            f"Price: {row['ltp']} | OI: {row['oi']}\n"
+        )
+    return "\n".join(lines)
 # ---------- utils ----------
 def split_message(text: str, max_length: int = 3900) -> List[str]:
     """Split text into chunks safe for Telegram (preserve lines)."""
@@ -172,6 +205,25 @@ def enrich_with_mcp(report: str, symbol: str) -> str:
         report += "\n\n" + "\n".join(news_block_lines)
 
     return report
+def format_fno_stock_summary(rr_output):
+    lines = []
+
+    for opt_type, payload in rr_output.items():
+        cands = payload.get("candidates")
+        if cands is None or cands.empty:
+            continue
+
+        lines.append(f"\n<b>{opt_type} Options</b>")
+
+        for _, row in cands.iterrows():
+            lines.append(
+                f"Strike {row['strike']} | Premium {row['premium']}\n"
+                f"• Breakeven: {row['breakeven']}\n"
+                f"• PoP: {row['probability']:.1f}%\n"
+                f"• SL: {row['sl_premium']}"
+            )
+
+    return "\n".join(lines)
 
 
 # ---------- callback router ----------
@@ -209,6 +261,33 @@ async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if data == "opt_menu":
             USER_STATE[uid] = "OPT"
             await query.edit_message_text("⚡ Options Menu", reply_markup=ik_opt_menu())
+            return
+        # -------------------------------
+        # VOLATILITY STRATEGY REPORT
+        # -------------------------------
+        if data == "idx_volatility":
+            await query.edit_message_text("⏳ Calculating Volatility Strategy…")
+
+            try:
+                from compute.vol_strategies import analyze_vix_and_nifty, format_vol_report_telegram
+
+                raw = analyze_vix_and_nifty()
+                report = format_vol_report_telegram(raw)
+
+                for chunk in split_message(report):
+                    await context.bot.send_message(
+                        chat_id=uid,
+                        text=chunk,
+                        reply_markup=ik_persistent()
+                    )
+
+            except Exception as e:
+                logger.exception("Volatility Strategy error")
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=f"❌ Error generating Volatility Strategy Report:\n\n{e}",
+                    reply_markup=ik_persistent()
+                )
             return
 
         if data == "opt_best":
@@ -255,6 +334,47 @@ async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 logger.exception("BankNifty analysis error")
                 await context.bot.send_message(chat_id=uid, text=f"❌ BANKNIFTY analysis failed: {e}", reply_markup=ik_persistent())
             return
+        # ---------------- FnO Menu ----------------
+        if data == "fno_menu":
+            USER_STATE[uid] = "FNO"
+            await query.edit_message_text("🧿 FnO Dashboard", reply_markup=ik_fno_menu())
+            return
+
+        if data == "fno_gainers":
+            snap = fetch_fno_snapshot()
+            gainers, _ = get_top_movers(snap)
+            msg = format_top_list(gainers, "📈 FnO Top Gainers")
+            await query.edit_message_text(msg, parse_mode="HTML", reply_markup=ik_persistent())
+            return
+
+        if data == "fno_losers":
+            snap = fetch_fno_snapshot()
+            _, losers = get_top_movers(snap)
+            msg = format_top_list(losers, "📉 FnO Top Losers")
+            await query.edit_message_text(msg, parse_mode="HTML", reply_markup=ik_persistent())
+            return
+
+        if data == "fno_search":
+            USER_STATE[uid] = "FNO_WAIT"
+            await query.edit_message_text("🔍 Send FnO stock name/symbol", reply_markup=ik_persistent())
+            return
+        if data.startswith("fnoc_") or data.startswith("fnop_") or data.startswith("fnof_"):
+            _, symbol = data.split("_", 1)
+            rr_output = analyze_fno_stock(symbol)
+
+            if rr_output.get("error"):
+                await query.edit_message_text(rr_output["error"], reply_markup=ik_persistent())
+                return
+
+            if data.startswith("fnoc_"):
+                msg = format_fno_stock_summary({"CE": rr_output["CE"]})
+            elif data.startswith("fnop_"):
+                msg = format_fno_stock_summary({"PE": rr_output["PE"]})
+            else:
+                msg = format_fno_stock_summary(rr_output)
+
+            await query.edit_message_text(msg, parse_mode="HTML", reply_markup=ik_persistent())
+            return
 
         # unknown
         await query.edit_message_text("⚠️ Unknown action", reply_markup=ik_persistent())
@@ -291,6 +411,7 @@ async def handle_usage(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=ik_persistent())
 
 
+
 # ---------- main message handler ----------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cleanup_expired()
@@ -301,119 +422,405 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # quick typing feedback
+    # typing feedback
     try:
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     except Exception:
         pass
 
-    # 1) numeric -> expiry selection
+    async def fno_menu(update, context):
+        keyboard = [
+            ["Top Gainers", "Top Losers"],
+            ["Search FnO Stock"],
+            ["Back"]
+        ]
+        await update.message.reply_text(
+            "📊 <b>FnO Dashboard</b>",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+            parse_mode="HTML"
+        )
+
+    async def handle_top_gainers(update, context):
+        snap = fetch_fno_snapshot()
+        gainers, _ = get_top_movers(snap)
+        msg = format_top_list(gainers, "📈 FnO Top Gainers")
+        await update.message.reply_text(msg, parse_mode="HTML")
+
+    async def handle_top_losers(update, context):
+        snap = fetch_fno_snapshot()
+        _, losers = get_top_movers(snap)
+        msg = format_top_list(losers, "📉 FnO Top Losers")
+        await update.message.reply_text(msg, parse_mode="HTML")
+
+    def format_vol_report_telegram(data):
+        v = data["vix"]["value"]
+        regime = data["regime"]
+        nifty = data["nifty_close"]
+        atr_pct = data["nifty_atr_pct"]
+        suggestions = data["suggestions"]
+
+        regime_text = {
+            "low": "🟢 *LOW VOLATILITY* – IV Cheap",
+            "medium": "🟡 *MEDIUM VOLATILITY* – Neutral IV",
+            "high": "🔴 *HIGH VOLATILITY* – IV Expensive"
+        }.get(regime, "⚪ Unknown Regime")
+
+        msg = f"""📉 *VOLATILITY STRATEGY REPORT*  
+    ────────────────────────────
+
+    🕒 *Timestamp:* `{data['timestamp']}`
+
+    📌 *Current VIX:* *{v}*
+    📌 *Regime:* {regime_text}
+    📌 *NIFTY Close:* `{nifty:,.2f}`
+    📌 *ATR%:* `{atr_pct:.2f}%`
+
+    📈 *STRATEGY SUGGESTIONS*
+    ────────────────────────────"""
+
+        for s in suggestions:
+            msg += f"""
+    • *{s['strategy'].replace('_', ' ').title()}*  
+      ➤ *Timing:* _{s['timing']}_  
+      ➤ *Notes:* {s['notes']}
+    """
+
+        msg += "\n────────────────────────────\n"
+        msg += "⚡ _Generated by Tidder 2.0 Options Engine_"
+
+        return msg
+
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from utils.logo_utils import get_company_details
+    from compute.options.fno_analysis import analyze_fno_stock
+
+    async def handle_fno_stock_query(update, context):
+        symbol = update.message.text.upper()
+
+        company_name, logo = get_company_details(symbol)
+
+        # 🔹 Send logo (if exists)
+        if logo and os.path.exists(logo):
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=open(logo, "rb"),
+                caption=f"<b>{symbol}</b>\n{company_name}",
+                parse_mode="HTML"
+            )
+        else:
+            await update.message.reply_text(
+                f"<b>{symbol}</b>\n{company_name}",
+                parse_mode="HTML"
+            )
+        # -------- FnO STOCK SEARCH FLOW --------
+        if USER_STATE.get(chat_id) == "FNO_WAIT":
+            symbol = text.upper()
+            company_name, logo = get_company_details(symbol)
+
+            # send logo
+            if logo and os.path.exists(logo):
+                await update.message.reply_photo(
+                    photo=open(logo, "rb"),
+                    caption=f"<b>{symbol}</b>\n{company_name}",
+                    parse_mode="HTML"
+                )
+            else:
+                await update.message.reply_text(f"<b>{symbol}</b>\n{company_name}", parse_mode="HTML")
+
+            # buttons
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("CE Options", callback_data=f"fnoc_{symbol}")],
+                [InlineKeyboardButton("PE Options", callback_data=f"fnop_{symbol}")],
+                [InlineKeyboardButton("Full Summary", callback_data=f"fnof_{symbol}")],
+            ])
+            await update.message.reply_text("Choose:", reply_markup=kb)
+
+            USER_STATE[chat_id] = None
+            return
+        # 🔹 Buttons under logo
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("CE Options", callback_data=f"fno_ce_{symbol}")],
+            [InlineKeyboardButton("PE Options", callback_data=f"fno_pe_{symbol}")],
+            [InlineKeyboardButton("Full Summary", callback_data=f"fno_full_{symbol}")],
+        ])
+
+        await update.message.reply_text(
+            "Choose what you want to view:",
+            reply_markup=keyboard
+        )
+
+    async def fno_button_handler(update, context):
+        query = update.callback_query
+        await query.answer()
+
+        action, symbol = query.data.split("_", 1)
+
+        rr_output = analyze_fno_stock(symbol)
+
+        if rr_output.get("error"):
+            await query.edit_message_text(rr_output["error"])
+            return
+
+        if action == "fno":
+            await query.edit_message_text("Unknown request")
+            return
+
+        if action == "fnoce":
+            msg = format_fno_stock_summary({"CE": rr_output["CE"]})
+        elif action == "fnope":
+            msg = format_fno_stock_summary({"PE": rr_output["PE"]})
+        else:
+            msg = format_fno_stock_summary(rr_output)
+
+        await query.edit_message_text(msg, parse_mode="HTML")
+
+    # -------------------------------------------------------------------
+    # 1️⃣ PENDING STATE (expiry selection / BNF flow)
+    # -------------------------------------------------------------------
     if re.fullmatch(r"\d{1,3}", text):
         pending = get_pending(chat_id)
         if not pending:
-            await update.message.reply_text("⚠️ No pending expiry selection.", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                "⚠️ No pending expiry selection.",
+                reply_markup=ik_persistent(),
+            )
             return
 
         idx = int(text) - 1
         expiries = pending["state"]["expiries"]
         if idx < 0 or idx >= len(expiries):
-            await update.message.reply_text(f"❌ Invalid choice. Pick 1..{len(expiries)}.", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                f"❌ Invalid choice. Pick 1..{len(expiries)}.",
+                reply_markup=ik_persistent(),
+            )
             return
 
         data = pop_pending(chat_id)
-        # route to BankNifty special flow if bnf flag present
         try:
+            # BankNifty special
             if isinstance(data, dict) and data.get("bnf"):
                 expiry = expiries[idx]
                 out = await analyze_bnf_for_expiry(expiry)
                 for chunk in split_message(out):
                     await update.message.reply_text(chunk, reply_markup=ik_persistent())
             else:
-                result = await process_option_rr_telegram(data["message_text"], expiry_selection=idx, desired_rr=REQUEST_RR)
+                result = await process_option_rr_telegram(
+                    data["message_text"],
+                    expiry_selection=idx,
+                    desired_rr=REQUEST_RR,
+                )
                 for chunk in split_message(result):
-                    await update.message.reply_text(chunk, parse_mode="Markdown", reply_markup=ik_persistent())
+                    await update.message.reply_text(
+                        chunk, parse_mode="Markdown", reply_markup=ik_persistent()
+                    )
         except Exception as e:
             logger.exception("expiry selection error")
-            await update.message.reply_text(f"❌ Option scan failed: {e}", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                f"❌ Option scan failed: {e}", reply_markup=ik_persistent()
+            )
         return
 
-    # 2) option detection
+    # -------------------------------------------------------------------
+    # 2️⃣ OPTION QUERY DETECTION (Runs BEFORE NLP)
+    # -------------------------------------------------------------------
     ticker_guess, dtype_guess, expiry_token = parse_tg_input(text)
-    option_tokens = ("CE", "PE", "-")
     is_option_query = False
-    if "-" in text or re.search(r"\b(CE|PE|CEPE)\b", text.upper()) or re.search(r"\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b", text.upper()):
+
+    if (
+        "-" in text
+        or re.search(r"\b(CE|PE)\b", text.upper())
+        or re.search(r"\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b", text.upper())
+    ):
         is_option_query = True
 
     if is_option_query and ticker_guess:
+        # daily limit
         if not can_user_request(user_id):
-            await update.message.reply_text("🚫 Daily free limit reached.", parse_mode="Markdown", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                "🚫 Daily free limit reached.",
+                parse_mode="Markdown",
+                reply_markup=ik_persistent(),
+            )
             return
+
         log_user_request(user_id)
 
-        # expiry provided -> run immediately
+        # expiry given
         if expiry_token:
-            await update.message.reply_text(f"📥 Processing {ticker_guess} {dtype_guess} for {expiry_token}…", parse_mode="Markdown")
+            await update.message.reply_text(
+                f"📥 Processing {ticker_guess} {dtype_guess} for {expiry_token}…",
+                parse_mode="Markdown",
+            )
             try:
-                res = await process_option_rr_telegram(text, expiry_str=expiry_token, desired_rr=REQUEST_RR)
+                res = await process_option_rr_telegram(
+                    text, expiry_str=expiry_token, desired_rr=REQUEST_RR
+                )
                 for chunk in split_message(res):
-                    await update.message.reply_text(chunk, parse_mode="Markdown", reply_markup=ik_persistent())
+                    await update.message.reply_text(
+                        chunk, parse_mode="Markdown", reply_markup=ik_persistent()
+                    )
             except Exception as e:
                 logger.exception("option immediate scan failed")
-                await update.message.reply_text(f"❌ Option RR scan failed: {e}", reply_markup=ik_persistent())
+                await update.message.reply_text(
+                    f"❌ Option RR scan failed: {e}", reply_markup=ik_persistent()
+                )
             return
 
-        # otherwise show expiry menu
+        # expiry menu
         try:
             menu_text, state = await get_expiry_menu_and_state(text)
             set_pending(chat_id, {"message_text": text, "state": state})
             await update.message.reply_text(menu_text, reply_markup=ik_persistent())
         except Exception as e:
             logger.exception("could not fetch expiries")
-            await update.message.reply_text(f"❌ Could not fetch expiries: {e}", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                f"❌ Could not fetch expiries: {e}", reply_markup=ik_persistent()
+            )
         return
 
-    # 3) NIFTY50 quick
+    # -------------------------------------------------------------------
+    # 3️⃣ QUICK KEYWORD — NIFTY50
+    # -------------------------------------------------------------------
     if text.upper() == "NIFTY50":
-        await update.message.reply_text("📊 Running NIFTY50 analysis…", reply_markup=ik_persistent())
+        await update.message.reply_text(
+            "📊 Running NIFTY50 analysis…", reply_markup=ik_persistent()
+        )
         try:
             report = analyze_nifty(for_telegram=True)
             for chunk in split_message(report):
                 await update.message.reply_text(chunk, reply_markup=ik_persistent())
         except Exception as e:
             logger.exception("NIFTY50 error")
-            await update.message.reply_text(f"❌ Failed analyzing NIFTY50: {e}", reply_markup=ik_persistent())
+            await update.message.reply_text(
+                f"❌ Failed analyzing NIFTY50: {e}", reply_markup=ik_persistent()
+            )
         return
 
-    # 4) NLP-driven stock analysis
-    intent, symbol = extract_intent_and_symbol(text.upper(), company_df)
-    if not symbol:
-        await update.message.reply_text("❌ Could not detect a valid company name or symbol.", reply_markup=ik_persistent())
-        return
+    # -------------------------------------------------------------------
+    # 4️⃣ NLP INTENT MODEL (Runs AFTER options / quick commands)
+    # -------------------------------------------------------------------
+    intent = predict_intent(text)
+    print("Predicted Intent:", intent)
+    # -------------------------------------------------------
+    #  NLP INTENT-BASED COMMAND HANDLING (Stoploss/Target/etc.)
+    # -------------------------------------------------------
+    from nlp.extract_entities import extract_stock_entity
+    from utils.symbol_resolver import resolve_symbol
+    from compute.indicators.nlp_insights import (
+        compute_hold_or_sell,
+        compute_future_outlook,
+        compute_stoploss,
+        compute_target,
+        compute_basic
+    )
 
-    if not can_user_request(user_id):
-        await update.message.reply_text("🚫 Daily free limit reached.", parse_mode="Markdown", reply_markup=ik_persistent())
-        return
-    log_user_request(user_id)
+    # --------------------------------------------------------
+    # 1) If message contains a stock-advise intent
+    # --------------------------------------------------------
+    if intent in ["hold_or_sell", "future_outlook", "stoploss", "target"]:
 
-    await update.message.reply_text(f"🔍 Processing {symbol} …", parse_mode="Markdown", reply_markup=ik_persistent())
-
-    try:
-        success, report = run_pipeline_for_symbol(symbol, chat_id)
-        if success and report:
-            enriched = enrich_with_mcp(report, symbol)
-            for chunk in split_message(enriched):
-                await update.message.reply_text(chunk, reply_markup=ik_persistent())
+        # --- resolve the symbol ---
+        resolved_symbol = resolve_symbol(text)
+        if not resolved_symbol:
+            await update.message.reply_text(
+                "❌ Could not detect a valid symbol.\nPlease type a company name or stock symbol."
+            )
             return
 
-        # fallback
-        report = analyze_single_stock(symbol)
-        for chunk in split_message(report):
-            await update.message.reply_text(chunk, reply_markup=ik_persistent())
+        symbol = resolved_symbol
 
-    except Exception as e:
-        logger.exception("stock analysis error")
-        await update.message.reply_text(f"❌ Error analyzing {symbol}: {e}", reply_markup=ik_persistent())
+        # --- load indicator-enriched DF ---
+        df = analyze_single_stock(symbol, return_df=True)
+        if df is None:
+            await update.message.reply_text(
+                f"⚠️ Could not fetch data for **{symbol}**."
+            )
+            return
 
+        # --- route to correct NLP compute function ---
+        if intent == "hold_or_sell":
+            df = analyze_single_stock(symbol, return_df=True)
+            advice = compute_hold_or_sell(df)
+
+        elif intent == "future_outlook":
+            advice = compute_future_outlook(df)
+        elif intent == "stoploss":
+            advice = compute_stoploss(df)
+        elif intent == "target":
+            advice = compute_target(df)
+
+        await update.message.reply_text(
+            f"📊 *{symbol}* — NLP advisory result:\n\n{advice}",
+            parse_mode="Markdown"
+        )
+
+        return
+
+    # extract symbol if NLP says so
+    intent2, symbol = extract_intent_and_symbol(text.upper(), company_df)
+
+    if intent2 and symbol:
+        if not can_user_request(user_id):
+            await update.message.reply_text(
+                "🚫 Daily free limit reached.",
+                parse_mode="Markdown",
+                reply_markup=ik_persistent(),
+            )
+            return
+
+        log_user_request(user_id)
+
+        await update.message.reply_text(
+            f"🔍 Processing {symbol} …",
+            parse_mode="Markdown",
+            reply_markup=ik_persistent(),
+        )
+        try:
+            success, report = run_pipeline_for_symbol(symbol, chat_id)
+            if success and report:
+                enriched = enrich_with_mcp(report, symbol)
+                for chunk in split_message(enriched):
+                    await update.message.reply_text(chunk, reply_markup=ik_persistent())
+                return
+
+            # fallback
+            report = analyze_single_stock(symbol)
+            for chunk in split_message(report):
+                await update.message.reply_text(chunk, reply_markup=ik_persistent())
+
+        except Exception as e:
+            logger.exception("stock analysis error")
+            await update.message.reply_text(
+                f"❌ Error analyzing {symbol}: {e}", reply_markup=ik_persistent()
+            )
+        return
+
+    # -------------------------------------------------------------------
+    # 5️⃣ FALLBACK (Unknown input)
+    # -------------------------------------------------------------------
+    await update.message.reply_text(
+        "⚠️ Could not detect a valid symbol or request.\nPlease choose an option below 👇",
+        reply_markup=ik_persistent(),
+    )
+
+async def handle_fno_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(
+        "🔎 Send FnO Stock Symbol (e.g., TCS, RELIANCE, HDFCBANK)",
+        reply_markup=ik_persistent()
+    )
+    USER_STATE[update.effective_chat.id] = "FNO_WAIT"
+
+def extract_symbol_from_text(text: str):
+    import re
+    from utils.symbol_resolver import resolve_symbol  # your existing resolver
+
+    words = re.findall(r"[A-Za-z]+", text.upper())
+    for w in words:
+        symbol = resolve_symbol(w)
+        if symbol:
+            return symbol
+    return None
 
 # ---------- BankNifty convenience commands ----------
 async def handle_bnf_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -427,7 +834,6 @@ async def handle_bnf_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.exception("bnf cmd error")
         await update.message.reply_text(f"❌ Could not fetch BankNifty expiries: {e}", reply_markup=ik_persistent())
-
 
 # ---------- app bootstrap ----------
 def main() -> None:
