@@ -59,7 +59,9 @@ from utils.logo_utils import get_company_details
 from compute.options.fno_analysis import analyze_fno_stock
 from compute.options.fno_snapshot import fetch_fno_snapshot, get_top_movers
 
-
+import json
+import os
+from datetime import datetime
 
 # ---------- config ----------
 load_dotenv()
@@ -170,7 +172,36 @@ def split_message(text: str, max_length: int = 3900) -> List[str]:
         chunks.append(buf)
     return chunks
 
+# -----------------------------------
+FILE = "storage/user_stats.json"
 
+def load_stats():
+    if not os.path.exists(FILE):
+        return {}
+    with open(FILE) as f:
+        return json.load(f)
+
+def save_stats(data):
+    with open(FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+def update_user_access(user_id, username):
+    data = load_stats()
+
+    uid = str(user_id)
+    if uid not in data:
+        data[uid] = {
+            "username": username,
+            "first_seen": str(datetime.now()),
+            "last_seen": str(datetime.now()),
+            "access_count": 1
+        }
+    else:
+        data[uid]["last_seen"] = str(datetime.now())
+        data[uid]["access_count"] += 1
+
+    save_stats(data)
+#--------------------------------------------------------------
 def enrich_with_mcp(report: str, symbol: str) -> str:
     """Prepend company info and append cleaned news lines (safe f-strings)."""
     try:
@@ -252,7 +283,7 @@ async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if data == "stock_analyze":
             USER_STATE[uid] = "STOCK_WAIT"
             await query.edit_message_text(
-                "🔍 Send a stock name or symbol.\n(Or tap 🏠 Menu anytime)",
+                "🔍 Send a stock name or symbol (Eg: ICICIBANK ).\n(Or tap 🏠 Menu anytime)",
                 reply_markup=ik_persistent()
             )
             return

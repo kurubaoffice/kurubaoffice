@@ -92,7 +92,19 @@ def get_user_usage(user_id):
 def log_user_request(user_id):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+
+            # 1️⃣ Insert into request_logs
             cur.execute("""
                 INSERT INTO request_logs (user_id, requested_at)
                 VALUES (%s, NOW())
             """, (user_id,))
+
+            # 2️⃣ Update counters in users table
+            cur.execute("""
+                UPDATE users
+                SET 
+                    access_count = access_count + 1,
+                    last_used = NOW()
+                WHERE id = %s
+            """, (user_id,))
+
