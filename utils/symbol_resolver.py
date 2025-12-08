@@ -1,44 +1,59 @@
 import pandas as pd
 from rapidfuzz import process, fuzz
 import os
+import glob
 
 # -------------------------------
-# Load NSE full company list
+# Detect data directory
 # -------------------------------
-FULL_LIST_PATH = "data/raw/company_info.csv"  # you have this already
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(ROOT, "Tidder2.0", "data", "raw")
+os.makedirs(DATA_DIR, exist_ok=True)
 
-if os.path.exists(FULL_LIST_PATH):
+# -------------------------------
+# Auto-detect CSV
+# -------------------------------
+csv_files = glob.glob(os.path.join(DATA_DIR, "company_info.csv"))
+
+if not csv_files:
+    print("[symbol_resolver] No CSV file found in", DATA_DIR)
+    full_symbols = {}
+else:
+    FULL_LIST_PATH = csv_files[0]
+    print("[symbol_resolver] Using CSV:", FULL_LIST_PATH)
+
     try:
         df_full = pd.read_csv(FULL_LIST_PATH)
-        df_full.columns = [c.lower() for c in df_full.columns]
+        # Normalize columns
+        df_full.columns = [c.lower().replace(" ", "_") for c in df_full.columns]
 
-        # Expect columns: company_name, symbol
+        # Automatically detect columns
+        name_col = [c for c in df_full.columns if "name" in c][0]
+        symbol_col = [c for c in df_full.columns if "symbol" in c][0]
+
         full_symbols = {
-            str(row["company_name"]).upper(): str(row["symbol"]).upper()
+            str(row[name_col]).upper(): str(row[symbol_col]).upper()
             for _, row in df_full.iterrows()
-            if pd.notna(row["symbol"])
+            if pd.notna(row[symbol_col])
         }
+
     except Exception as e:
         print("[symbol_resolver] Error loading full list:", e)
         full_symbols = {}
-else:
-    print("[symbol_resolver] Full NSE list not found at", FULL_LIST_PATH)
-    full_symbols = {}
 
 # For fuzzy search
 company_names = list(full_symbols.keys())
 
 
-# -----------------------------------------------------------
+# -------------------------------
 # Core Resolver
-# -----------------------------------------------------------
+# -------------------------------
 def resolve_symbol(query: str):
     """
     Given any text (e.g., 'tcs', 'Reliance', 'infosys ltd', 'HDFC BANK'),
     returns the NSE symbol (e.g., 'TCS', 'RELIANCE', 'INFY', 'HDFCBANK').
     """
-
-    if not query:
+    if not query or not full_symbols:
         return None
 
     q = query.strip().upper()
@@ -51,7 +66,7 @@ def resolve_symbol(query: str):
     if q in full_symbols:
         return full_symbols[q]
 
-    # 3️⃣ Starts-with match (TATA, HDFC etc.)
+    # 3️⃣ Starts-with match
     for name, sym in full_symbols.items():
         if name.startswith(q):
             return sym

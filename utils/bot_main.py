@@ -15,7 +15,10 @@ from telegram.ext import (
 from bot_ui.keyboards import main_menu_keyboard
 from bot_handlers.main_router import button_router
 from bot_handlers.message_router import handle_message
-
+from reporting.report_single_stock import analyze_single_stock
+from symbol_resolver import resolve_symbol
+from telegram import Update
+from telegram.ext import ContextTypes
 # =========================
 # ✅ LOAD ENV
 # =========================
@@ -48,6 +51,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❓ Help Menu\n\nUse the buttons below to navigate.",
         reply_markup=main_menu_keyboard()
     )
+
+async def handle_stock_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_text = update.message.text.strip()
+
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+
+    # Resolve symbol from any input
+    symbol = resolve_symbol(user_text)
+    if not symbol:
+        await update.message.reply_text("❌ Could not detect a valid stock name or symbol.")
+        return
+
+    await update.message.reply_text(f"🔍 Processing `{symbol}`…", parse_mode="Markdown")
+
+    # Generate report
+    report = analyze_single_stock(symbol)
+
+
 
 
 # =========================
