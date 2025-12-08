@@ -32,7 +32,7 @@ def get_index_constituents(index_name="NIFTY 50"):
 def fetch_and_save_index_data(symbol="^NSEI", filename="NIFTY.csv"):
     print(f"[📈] Downloading index data for: {symbol}")
     try:
-        df = yf.download(symbol, period="6mo", interval="1d", progress=False)
+        df = yf.download(symbol, period="6mo", interval="1d", progress=False, auto_adjust="true")
         df.dropna(inplace=True)
         df.reset_index(inplace=True)
         df.to_csv(PROCESSED_INDEX_DIR / filename, index=False)
@@ -45,7 +45,7 @@ def fetch_and_save_stock_data(symbols):
     for sym in symbols:
         try:
             print(f"[📊] Downloading: {sym}")
-            df = yf.download(f"{sym}.NS", period="6mo", interval="1d", progress=False)
+            df = yf.download(f"{sym}.NS", period="6mo", interval="1d", progress=False, auto_adjust="true")
             df.dropna(inplace=True)
             df.reset_index(inplace=True)
             df.to_csv(PROCESSED_STOCK_DIR / f"{sym}.csv", index=False)

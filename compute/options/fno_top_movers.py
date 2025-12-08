@@ -1,10 +1,14 @@
 import pandas as pd
 
-def get_top_movers(snapshot):
-    df = pd.DataFrame(snapshot)
-    df["change_pct"] = df["change_pct"].astype(float)
 
-    gainers = df.sort_values("change_pct", ascending=False).head(5)
-    losers = df.sort_values("change_pct").head(5)
+# ✅ RETURNS DATAFRAMES ONLY
+def get_top_movers_df(df: pd.DataFrame, limit=10):
+    if df is None or df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    df = df.sort_values("change_pct", ascending=False)
+
+    gainers = df.head(limit)
+    losers = df.tail(limit)
 
     return gainers, losers
